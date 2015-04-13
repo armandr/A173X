@@ -1,12 +1,11 @@
 /**
  *	 Thermostat
  *
- *	Author: SmartThings
- *	Date: 2013-12-02
+ *	Author: Fidure, Based on SmartThings Original device type
+ *	Date: 2014-12-20
  */
 metadata {
-	// Automatically generated. Make future change here.
-	definition (name: "Fidure Thermostat", namespace: "smartthings", author: "SmartThings") {
+	definition (name: "Fidure A173X Thermostat", namespace: "smartthings", author: "Fidure") {
 		capability "Actuator"
 		capability "Temperature Measurement"
 		capability "Thermostat"
@@ -14,7 +13,9 @@ metadata {
 		capability "Refresh"
 		capability "Sensor"
 
-				fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0201,0204,0B05", outClusters: "000A, 0019"
+		attribute "modeStatus", "string"
+
+		fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0201,0204,0B05", outClusters: "000A, 0019"
 
 	}
 
@@ -25,26 +26,41 @@ metadata {
 		valueTile("temperature", "device.temperature", width: 2, height: 2) {
 			state("temperature", label:'${currentValue}°', unit:"F",
 				backgroundColors:[
-					[value: 31, color: "#153591"],
-					[value: 44, color: "#1e9cbb"],
-					[value: 59, color: "#90d2a7"],
-					[value: 74, color: "#44b621"],
-					[value: 84, color: "#f1d801"],
-					[value: 95, color: "#d04e00"],
-					[value: 96, color: "#bc2323"]
-				]
+				[value: 0, color: "#153591"],
+				[value: 7, color: "#1e9cbb"],
+				[value: 15, color: "#90d2a7"],
+				[value: 23, color: "#44b621"],
+				[value: 29, color: "#f1d801"],
+				[value: 35, color: "#d04e00"],
+				[value: 36, color: "#bc2323"],
+									// fahrenheit range
+				[value: 37, color: "#153591"],
+				[value: 44, color: "#1e9cbb"],
+				[value: 59, color: "#90d2a7"],
+				[value: 74, color: "#44b621"],
+				[value: 84, color: "#f1d801"],
+				[value: 95, color: "#d04e00"],
+				[value: 96, color: "#bc2323"]
+					]
 			)
 		}
 		standardTile("mode", "device.thermostatMode", inactiveLabel: false, decoration: "flat") {
-			state "off", label:'${name}', action:"thermostat.setThermostatMode"
-			state "cool", label:'${name}', action:"thermostat.setThermostatMode"
-			state "heat", label:'${name}', action:"thermostat.setThermostatMode"
-			state "emergencyHeat", label:'${name}', action:"thermostat.setThermostatMode"
+			state "off",   action:"thermostat.setThermostatMode", label:'${name}', icon:"st.thermostat.heating-cooling-off"
+			state "heat",  action:"thermostat.setThermostatMode", label:'${name}', icon:"st.thermostat.heat"
+      state "cool",  action:"thermostat.setThermostatMode", label:'${name}', icon:"st.thermostat.cool"
+			state "auto",  action:"thermostat.setThermostatMode", label:'${name}', icon:"st.thermostat.Auto"
 		}
 		standardTile("fanMode", "device.thermostatFanMode", inactiveLabel: false, decoration: "flat") {
 			state "fanAuto", label:'${name}', action:"thermostat.setThermostatFanMode"
 			state "fanOn", label:'${name}', action:"thermostat.setThermostatFanMode"
 		}
+
+		standardTile("modeStatus", "modeStatus", inactiveLabel: false, decoration: "flat") {
+				state "Resting",  label: 'Resting'
+				state "Heating",  icon:"st.thermostat.heating"
+				state "Cooling",  icon:"st.thermostat.cooling"
+		}
+
 		controlTile("heatSliderControl", "device.heatingSetpoint", "slider", height: 1, width: 2, inactiveLabel: false) {
 			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint", backgroundColor:"#d04e00"
 		}
@@ -64,7 +80,7 @@ metadata {
 			state "configure", label:'', action:"configuration.configure", icon:"st.secondary.configure"
 		}
 		main "temperature"
-		details(["temperature", "mode", "fanMode", "heatSliderControl", "heatingSetpoint", "coolSliderControl", "coolingSetpoint", "refresh", "configure"])
+		details(["temperature", "mode", "modeStatus", "heatSliderControl", "heatingSetpoint", "coolSliderControl", "coolingSetpoint", "refresh", "configure"])
 	}
 }
 
@@ -96,6 +112,12 @@ def parse(String description) {
 			log.debug "FAN MODE"
 			map.name = "thermostatFanMode"
 			map.value = getFanModeMap()[descMap.value]
+		} else if (descMap.cluster == "0201" && descMap.attrId == "0029") {
+			// hvac relay state bitmap
+			log.trace "modeStatus: ${descMap.value}"
+			map.name = "modeStatus"
+			map.value = getModeStatus(descMap.value)
+			break;
 		}
 	}
 
@@ -117,8 +139,7 @@ def parseDescriptionAsMap(description) {
 def getModeMap() { [
 	"00":"off",
 	"03":"cool",
-	"04":"heat",
-	"05":"emergencyHeat"
+	"04":"heat"
 ]}
 
 def getFanModeMap() { [
@@ -126,22 +147,37 @@ def getFanModeMap() { [
 	"05":"fanAuto"
 ]}
 
+def getModeStatus(value)
+{
+	String[] m = [ "Heating", "Cooling", "Fan", "Heat2", "Cool2", "Fan2", "Fan3"]
+	String desc = 'Resting'
+		value = Integer.parseInt(value, 16)
+
+		// only check for 1-stage  for A1730
+	for ( i in 0..2 ) {
+		if (value & 1 << i)
+			desc = m[i]
+	}
+
+	desc
+}
+
 def refresh()
 {
 	log.debug "refresh called"
 	[
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0", "delay 200",
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x11", "delay 200",
-  		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x12", "delay 200",
+  	"st rattr 0x${device.deviceNetworkId} 1 0x201 0x12", "delay 200",
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x1C", "delay 200",
-		"st rattr 0x${device.deviceNetworkId} 1 0x202 0"
+		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x29"
 	]
 }
-// Leaving out for now as its killing the batteries.
-//def poll() {
-//	log.debug "Executing 'poll'"
-//	refresh()
-//}
+
+def poll() {
+	log.debug "Executing 'poll'"
+	refresh()
+}
 
 def getTemperature(value) {
 	def celsius = Integer.parseInt(value, 16) / 100
@@ -182,79 +218,20 @@ def setThermostatMode() {
 	def index = modeOrder.indexOf(currentMode)
 	def next = index >= 0 && index < modeOrder.size() - 1 ? modeOrder[index + 1] : modeOrder[0]
 	log.debug "switching mode from $currentMode to $next"
-	"$next"()
+	setThermostatMode(next)
 }
 
-def setThermostatFanMode() {
-	log.debug "Switching fan mode"
-	def currentFanMode = device.currentState("thermostatFanMode")?.value
-	log.debug "switching fan from current mode: $currentFanMode"
-	def returnCommand
-
-	switch (currentFanMode) {
-		case "fanAuto":
-			returnCommand = fanOn()
-			break
-		case "fanOn":
-			returnCommand = fanAuto()
-			break
-	}
-	if(!currentFanMode) { returnCommand = fanAuto() }
-	returnCommand
-}
 
 def setThermostatMode(String value) {
 	log.debug "setThermostatMode({$value})"
-	"$value"()
-}
+	def val = getModeMap().find { it.value == next }?.key
 
-def setThermostatFanMode(String value) {
-	log.debug "setThermostatFanMode({$value})"
-	"$value"()
-}
+	sendEvent("name":"thermostatMode", "value":val)
 
-def off() {
-	log.debug "off"
-	sendEvent("name":"thermostatMode", "value":"off")
-	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {00}"
-}
-
-def cool() {
-	log.debug "cool"
-	sendEvent("name":"thermostatMode", "value":"cool")
-	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {03}"
-}
-
-def heat() {
-	log.debug "heat"
-	sendEvent("name":"thermostatMode", "value":"heat")
-	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {04}"
-}
-
-def emergencyHeat() {
-	log.debug "emergencyHeat"
-	sendEvent("name":"thermostatMode", "value":"emergency heat")
-	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {05}"
-}
-
-def on() {
-	fanOn()
-}
-
-def fanOn() {
-	log.debug "fanOn"
-	sendEvent("name":"thermostatFanMode", "value":"fanOn")
-	"st wattr 0x${device.deviceNetworkId} 1 0x202 0 0x30 {04}"
-}
-
-def auto() {
-	fanAuto()
-}
-
-def fanAuto() {
-	log.debug "fanAuto"
-	sendEvent("name":"thermostatFanMode", "value":"fanAuto")
-	"st wattr 0x${device.deviceNetworkId} 1 0x202 0 0x30 {05}"
+	[
+	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {$val}",
+	"delay 100"
+	]
 }
 
 def configure() {
