@@ -8,14 +8,14 @@
 metadata
 {
 	// Automatically generated. Make future change here.
-		definition (name: "Fidure A173X Thermostat", namespace: "smartthings", author: "SmartThings") {
+		definition (name: "Fidure Thermostat", namespace: "smartthings", author: "SmartThings") {
 		capability "Thermostat"
 		capability "Refresh"
 		command "setThermostatTime"
 
 		command "setTemperatureUnit"
 
-	attribute "modeStatus", "string"
+		attribute "modeStatus", "string"
     attribute "temperatureUnit","string"
     attribute "displayTemperature","string"
     attribute "displaySetpoint", "string"
@@ -532,7 +532,7 @@ def updateModeStatus()
 
 def getRelayStates(value) {
 
-    String[] m = [ "Heating", "Cooling", "Fan", "Heat2", "Cool2", "Fan2", "Fan3"]
+  String[] m = [ "Heating", "Cooling", "Fan", "Heat2", "Cool2", "Fan2", "Fan3"]
 	String desc = ''
     value = Integer.parseInt(value, 16)
 
