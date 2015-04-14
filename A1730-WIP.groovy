@@ -16,8 +16,10 @@ metadata {
         capability "Polling"
 
     attribute "modeStatus", "string"
+    attribute "lockLevel", "string"
 
 	command "setThermostatTime"
+  command "lock"
 
 	fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0201,0204,0B05", outClusters: "000A, 0019"
 
@@ -29,6 +31,7 @@ metadata {
      preferences {
  		input "tempOffset", "number", title: "Temperature Offset", description: "Adjust temperature by this many degrees", range: "*..*", displayDuringSetup: false
         input ("sync_clock", "boolean", title: "Synchronize Thermostat Clock Automatically?", options: ["Yes","No"])
+        input ("lock_level", "enum", title: "Thermostat Screen Lock Level", options: ["Full","Mode Only", "Setpoint"])
 
  	}
 
@@ -72,6 +75,13 @@ metadata {
 		}
 
 
+    standardTile("lock", "lockLevel", inactiveLabel: false, decoration: "flat") {
+        state "Unlocked",  icon:"st.Kids.kids10", action:"lock", label:'${name}'
+        state "Mode Only",  icon:"st.Kids.kids19", action:"lock", label:'${name}'
+        state "Setpoint",  icon:"st.Kids.kids19", action:"lock", label:'${name}'
+        state "Full",  icon:"st.Kids.kids19", action:"lock", label:'${name}'
+    }
+
 		controlTile("heatSliderControl", "device.heatingSetpoint", "slider", height: 1, width: 2, inactiveLabel: false) {
 			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint", backgroundColor:"#d04e00"
 		}
@@ -91,7 +101,7 @@ metadata {
 			state "configure", label:'', action:"configuration.configure", icon:"st.secondary.configure"
 		}
 		main "temperature"
-		details(["temperature", "mode", "hvacStatus", "heatSliderControl", "heatingSetpoint", "coolSliderControl", "coolingSetpoint", "refresh", "configure"])
+		details(["temperature", "mode", "hvacStatus", "heatSliderControl", "heatingSetpoint", "coolSliderControl", "coolingSetpoint", "lock", "refresh", "configure"])
 	}
 }
 
@@ -119,10 +129,10 @@ def parse(String description) {
 			log.debug "MODE"
 			map.name = "thermostatMode"
 			map.value = getModeMap()[descMap.value]
-		} else if (descMap.cluster == "0202" && descMap.attrId == "0000") {
-			log.debug "FAN MODE"
-			map.name = "thermostatFanMode"
-			map.value = getFanModeMap()[descMap.value]
+		} else if (descMap.cluster == "0204" && descMap.attrId == "0001") {
+			log.debug "LOCK LEVEL"
+			map.name = "lockLevel"
+			map.value = getLockMap()[descMap.value]
 		} else if (descMap.cluster == "0201" && descMap.attrId == "0029") {
       log.debug "Mode Status"
       map.name = "modeStatus"
@@ -179,7 +189,8 @@ def refresh()
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x11", "delay 200",
   		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x12", "delay 200",
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x1C", "delay 200",
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x29"
+		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x29", "delay 200",
+        "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 200",
 	]
 }
 
@@ -215,8 +226,8 @@ def setCoolingSetpoint(degrees) {
 	def celsius = (getTemperatureScale() == "C") ? degreesInteger : (fahrenheitToCelsius(degreesInteger) as Double).round(2)
 	[
     "st wattr 0x${device.deviceNetworkId} 1 0x201 0x11 0x29 {" + hex(celsius*100) + "}",
-    "info"
-  ] //+ setThermostatTime()
+  ] 
+  //+ setThermostatTime()
 }
 
 def modes() {
@@ -314,6 +325,36 @@ def updated()
     //log.trace "commands: "  + device
 }
 
+def getLockMap()
+{[
+  "00":"Unlocked",
+  "01":"Mode Only",
+  "02":"Setpoint",
+  "03":"Full",
+  "04":"Full",
+  "05":"Full",
+
+]}
+def lock()
+{
+
+	def currentLock = device.currentState("lockLevel")?.value
+  def val = getLockMap().find { it.value == currentLock }?.key
+  log.debug "current lock is: ${val}"
+
+  if (val == "00")
+      val = getLockMap().find { it.value == (settings.lock_level ?: "Full") }?.key
+  else
+      val = "00"
+
+  log.debug "sending ${val} as the new lock value"
+
+  ["st wattr 0x${device.deviceNetworkId} 1 0x204 1 0x30 {${val}}",
+   "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 500"
+  ]
+}
+
+
 def setThermostatTime()
 {
 
@@ -355,7 +396,6 @@ def setThermostatTime()
   ]
 }
 
-
 def configure() {
 
 	log.debug "binding to Thermostat and UI cluster"
@@ -363,24 +403,25 @@ def configure() {
 		"zdo bind 0x${device.deviceNetworkId} 1 1 0x201 {${device.zigbeeId}} {}", "delay 200",
 		"zdo bind 0x${device.deviceNetworkId} 1 1 0x204 {${device.zigbeeId}} {}", "delay 200",
         //"zcl global send-me-a-report [cluster:2] [attributeId:2] [dataType:1] [minReportTime:2] [maxReport-Time:2] [reportableChange:-1]"
-  		"zcl global send-me-a-report 0x201 0x0000 0x29 20 300 {32}", "delay 100",  // report temperature changes over 1F
+  		"zcl global send-me-a-report 0x201 0x0000 0x29 20 0xffff {32}", "delay 100",  // report temperature changes over 1F
   		"send 0x${device.deviceNetworkId} 1 1", "delay 200",
-        "zcl global send-me-a-report 0x201 0x0011 0x29 20 300 {32}", "delay 300",  // report cooling setpoint
+        "zcl global send-me-a-report 0x201 0x0011 0x29 20 0xffff {32}", "delay 300",  // report cooling setpoint
   		"send 0x${device.deviceNetworkId} 1 1", "delay 400",
-        "zcl global send-me-a-report 0x201 0x0012 0x29 20 300 {32}", "delay 500",  // report heating setpoint
+        "zcl global send-me-a-report 0x201 0x0012 0x29 20 0xffff {32}", "delay 500",  // report heating setpoint
         "send 0x${device.deviceNetworkId} 1 1", "delay 600",
-        "zcl global send-me-a-report 0x201 0x001C 0x30 20 300 {32}", "delay 700",  // report mode
+        "zcl global send-me-a-report 0x201 0x001C 0x30 20 0xffff {32}", "delay 700",  // report mode
          "send 0x${device.deviceNetworkId} 1 1", "delay 800",
-        "zcl global send-me-a-report 0x201 0x0029 0x19 20 300", "delay 900",  	   // report relay status
+ /*       "zcl global send-me-a-report 0x201 0x0029 0x19 20 300", "delay 900",  	   // report relay status
          "send 0x${device.deviceNetworkId} 1 1", "delay 1000",
         "zcl global send-me-a-report 0x201 0x0030 0x30 20 300", "delay 1100",  	   // set point changed source
          "send 0x${device.deviceNetworkId} 1 1", "delay 1200",
         "zcl global send-me-a-report 0x201 0x0025 0x19 20 300 {32}", "delay 1300",	// schedule on/off
          "send 0x${device.deviceNetworkId} 1 1", "delay 1400",
-        "zcl global send-me-a-report 0x201 0x0023 0x30 20 300", "delay 1500",		// hold
+*/      "zcl global send-me-a-report 0x201 0x0023 0x30 20 300", "delay 1500",		// hold
         "send 0x${device.deviceNetworkId} 1 1", "delay 1600",
         "zcl global send-me-a-report 0x201 0x001E 0x30 20 300", "delay 1700",		// running mode
         "send 0x${device.deviceNetworkId} 1 1", "delay 1800",
+
 ]
 }
 
