@@ -25,6 +25,11 @@ metadata {
   attribute "prorgammingOperationDisplay", "string"
   command   "Program"
 
+  attribute "setpointHold", "string"
+	attribute "setpointHoldDisplay", "string"
+	command "Hold"
+  attribute "holdExpiary", "string"
+
 
 	fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0201,0204,0B05", outClusters: "000A, 0019"
 
@@ -34,10 +39,13 @@ metadata {
 	simulator { }
   // pref
      preferences {
- 		input "tempOffset", "number", title: "Temperature Offset", description: "Adjust temperature by this many degrees", range: "*..*", displayDuringSetup: false
+
+		input ("hold_time", "enum", title: "Default Hold Time in Hours",
+        description: "Default Hold Duration in hours",
+        range: "1..24", options: ["No Hold", "2 Hours", "4 Hours", "8 Hours", "12 Hours", "1 Day"],
+        displayDuringSetup: true)
         input ("sync_clock", "boolean", title: "Synchronize Thermostat Clock Automatically?", options: ["Yes","No"])
         input ("lock_level", "enum", title: "Thermostat Screen Lock Level", options: ["Full","Mode Only", "Setpoint"])
-
  	}
 
 	tiles {
@@ -114,6 +122,10 @@ metadata {
         state "default", action:"Program", label: '${currentValue}'
     }
 
+    valueTile("hold", "setpointHoldDisplay", inactiveLabel: false, decoration: "flat", width: 3) {
+            state "setpointHold", action:"Hold", label: '${currentValue}'
+		}
+
 
 
 		main "temperature"
@@ -122,6 +134,7 @@ metadata {
     "heatSliderControl", "heatingSetpoint",
      "coolSliderControl", "coolingSetpoint",
     "scheduleText", "schedule",
+    "hold",
      "lock", "refresh", "configure"])
 	}
 }
@@ -148,11 +161,22 @@ def parse(String description) {
 		{
 			switch(descMap.attrId)
 			{
-        case "0000":
+            case "0000":
   						log.trace "TEMP"
   						map.name = "temperature"
   						map.value = getTemperature(descMap.value)
   					break;
+            case "0005":
+            //log.debug "hex time: ${descMap.value}"
+            	if (descMap.encoding ==  "23")
+                {
+            	    			map.name = "holdExpiary"
+                  	map.value = convertToTime(descMap.value)
+                    log.trace "HOLD EXPIRY: ${descMap.value} is ${map.value}"
+
+                    updateHoldLabel("HoldExp", "${map.value}")
+  				}
+            break;
   				  case "0011":
   						log.trace "COOLING SETPOINT"
   						map.name = "coolingSetpoint"
@@ -168,6 +192,18 @@ def parse(String description) {
   						map.name = "thermostatMode"
   						map.value = getModeMap()[descMap.value]
   					break;
+            case "0023":   // setpoint hold enum8
+            log.trace "setpoint Hold: ${descMap.value}"
+            map.name = "setpointHold"
+            map.value = getHoldMap()[descMap.value]
+            updateHoldLabel("Hold", map.value)
+            break;
+            case "0024":   // hold duration int16u
+            log.trace "setpoint Hold Duration: ${descMap.value}"
+            map.name = "setpointHoldDuration"
+            map.value = Integer.parseInt(descMap.value, 16)
+            //sendEvent("name":"setpointHoldDurationDisplay", "value": timeLength(map.value))
+            break;
             case "0025":   // thermostat programming operation bitmap8
   					log.trace "prorgamming Operation: ${descMap.value}"
   					map.name = "prorgammingOperation"
@@ -224,6 +260,144 @@ def getFanModeMap() { [
 	"05":"fanAuto"
 ]}
 
+def getHoldMap()
+{[
+	"00":"Off",
+	"01":"On"
+]}
+
+def updateHoldLabel(attr, value)
+{
+	def currentHold = (device?.currentState("setpointHold")?.value)?: "..."
+
+    def holdExp = (device?.currentState("holdExpiary")?.value)?: (new Date())
+
+	if ("Hold" == attr)
+    {
+    	currentHold = value
+    }
+
+    if ("HoldExp" == attr)
+    {
+    	holdExp = value
+    }
+
+	def holdString = (currentHold == "On")? "Ends ${compareWithNow(holdExp)}" : ((currentHold == "Off")? " is Off" : " ...")
+    //log?.trace "HOLD STRING: ${holdString}"
+
+    sendEvent("name":"setpointHoldDisplay", "value": "Hold ${holdString}")
+}
+
+def getSetPointHoldDuration()
+{
+	def holdTime = 0
+
+    log.debug "settings : ${settings.hold_time[0..1]}"
+
+    if (settings.hold_time.contains("Hours"))
+    {
+    	holdTime = Integer.parseInt(settings.hold_time[0..1].trim())
+    }
+    else if (settings.hold_time.contains("Day"))
+    {
+    	holdTime = Integer.parseInt(settings.hold_time[0..1].trim()) * 24
+    }
+
+    log.debug "hours : $holdTime"
+    def currentHoldDuration = device.currentState("setpointHoldDuration")?.value
+
+    if (currentHoldDuration != (holdTime * 3600))
+    {
+    	[
+        	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x24 0x21 {" +
+            String.format("%04X", holdTime * 3600) // this needs to be converted to correct endian
+
+            + "}", "delay 100",
+			"st rattr 0x${device.deviceNetworkId} 1 0x201 0x24", "delay 200",
+		]
+
+    } else
+    {
+    	[]
+    }
+
+}
+
+def Hold()
+{
+	log.trace "hold dur " + getSetPointHoldDuration()
+
+	log.debug "Flip Hold "
+	def currentHold = device.currentState("setpointHold")?.value
+
+	log.debug "current Hold ${currentHold}"
+
+
+	def next = (currentHold == "On") ? "00" : "01"
+	def nextHold = getHoldMap()[next]
+
+	log.debug "switching hold from $currentHold to $nextHold next: $next"
+
+	sendEvent("name":"setpointHold", "value":nextHold)
+
+    [
+    "st wattr 0x${device.deviceNetworkId} 1 0x201 0x23 0x30 {$next}", "delay 100" ,
+		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x23", "delay 300",
+    "raw 0x201 {04 21 11 00 00 05 00 }","delay 500",      // hold expiry time
+  	"send 0x${device.deviceNetworkId} 1 1", "delay 1000",
+    ]
+}
+
+def compareWithNow(d)
+{
+	long mins = (new Date(d)).getTime() - (new Date()).getTime()
+
+	mins /= 1000 * 60;
+
+    log.trace "mins: ${mins}"
+
+    boolean past = (mins < 0)
+    def ret = (past)? "" : "in "
+
+    if (past)
+    	mins *= -1;
+
+    log.trace "mins: ${mins}"
+
+	// minutes
+	if (mins < 60)
+	{
+			ret +=  (mins as Integer) + " min" + ((mins > 1)? 's' : '')
+	}else if (mins < 1440)
+	{
+		mins = ((mins/60) as Integer)
+        ret += mins + " hr" +  ((mins > 1)? 's' : '')
+	} else
+    {
+		mins = ((mins/1440) as Integer)
+        ret +=  mins + " day" + ((mins > 1)? 's' : '')
+	}
+    ret += (past)? " ago": ""
+
+    log.trace "ret: ${ret}"
+
+    ret
+}
+
+def convertToTime(data)
+{
+	def time = Integer.parseInt(data, 16) as long;
+    time *= 1000;
+    time += 946684800000; // 481418694
+    time -= location.timeZone.getRawOffset() + location.timeZone.getDSTSavings();
+
+    def d = new Date(time);
+
+    //log.debug "time: " + time + " date: " + d;
+
+	return d;
+}
+
 def Program()
 {
 	log.debug "Program"
@@ -267,6 +441,7 @@ def getModeStatus(value)
 	desc
 }
 
+
 def refresh()
 {
 	log.debug "refresh called"
@@ -275,12 +450,17 @@ def refresh()
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x11", "delay 200",  // cooling setpoint
   	"st rattr 0x${device.deviceNetworkId} 1 0x201 0x12", "delay 200",  // heating setpoint
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x1C", "delay 200",  // mode enum8
+    "st rattr 0x${device.deviceNetworkId} 1 0x201 0x23", "delay 200",  // setpoint hold enum8
+    "st rattr 0x${device.deviceNetworkId} 1 0x201 0x24", "delay 200",  // hold duration int16u
     "st rattr 0x${device.deviceNetworkId} 1 0x201 0x25", "delay 200",  // thermostat programming operation bitmap8
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x29", "delay 200",  // hvac relay state bitmap
     "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 200",  // lock status
+    "raw 0x201 {04 21 11 00 00 05 00 }"                , "delay 500",       // hold expiary
+    "send 0x${device.deviceNetworkId} 1 1"             , "delay 600",
 
 	]
 }
+
 
 def poll() {
 	log.debug "Executing 'poll'"
