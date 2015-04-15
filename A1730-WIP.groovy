@@ -21,6 +21,11 @@ metadata {
 	command "setThermostatTime"
   command "lock"
 
+  attribute "prorgammingOperation", "number"
+  attribute "prorgammingOperationDisplay", "string"
+  command   "Program"
+
+
 	fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0201,0204,0B05", outClusters: "000A, 0019"
 
 	}
@@ -88,7 +93,7 @@ metadata {
 		valueTile("heatingSetpoint", "device.heatingSetpoint", inactiveLabel: false, decoration: "flat") {
 			state "heat", label:'${currentValue}° heat', unit:"F", backgroundColor:"#ffffff"
 		}
-		controlTile("coolSliderControl", "device.coolingSetpoint", "slider", height: 1, width: 2, inactiveLabel: false) {
+		controlTile("coolSliderControl", "device.coolingSetpoint", "slider", height: 1, width: 2, inactiveLabel: false, range: "$min..$max") {
 			state "setCoolingSetpoint", action:"thermostat.setCoolingSetpoint", backgroundColor: "#1e9cbb"
 		}
 		valueTile("coolingSetpoint", "device.coolingSetpoint", inactiveLabel: false, decoration: "flat") {
@@ -100,11 +105,35 @@ metadata {
 		standardTile("configure", "device.configure", inactiveLabel: false, decoration: "flat") {
 			state "configure", label:'', action:"configuration.configure", icon:"st.secondary.configure"
 		}
+
+
+    valueTile("scheduleText", "prorgammingOperation", inactiveLabel: false, decoration: "flat", width: 2) {
+        state "default", label: 'Schedule'
+    }
+    valueTile("schedule", "prorgammingOperationDisplay", inactiveLabel: false, decoration: "flat") {
+        state "default", action:"Program", label: '${currentValue}'
+    }
+
+
+
 		main "temperature"
-		details(["temperature", "mode", "hvacStatus", "heatSliderControl", "heatingSetpoint", "coolSliderControl", "coolingSetpoint", "lock", "refresh", "configure"])
+		details([
+      "temperature", "mode", "hvacStatus",
+    "heatSliderControl", "heatingSetpoint",
+     "coolSliderControl", "coolingSetpoint",
+    "scheduleText", "schedule",
+     "lock", "refresh", "configure"])
 	}
 }
 
+
+def getMin() {
+	32
+}
+
+def getMax() {
+	85
+}
 
 // parse events into attributes
 def parse(String description) {
@@ -113,32 +142,56 @@ def parse(String description) {
 	if (description?.startsWith("read attr -")) {
 		def descMap = parseDescriptionAsMap(description)
 		log.debug "Desc Map: $descMap"
-		if (descMap.cluster == "0201" && descMap.attrId == "0000") {
-			log.debug "TEMP"
-			map.name = "temperature"
-			map.value = getTemperature(descMap.value)
-		} else if (descMap.cluster == "0201" && descMap.attrId == "0011") {
-			log.debug "COOLING SETPOINT"
-			map.name = "coolingSetpoint"
-			map.value = getTemperature(descMap.value)
-		} else if (descMap.cluster == "0201" && descMap.attrId == "0012") {
-			log.debug "HEATING SETPOINT"
-			map.name = "heatingSetpoint"
-			map.value = getTemperature(descMap.value)
-		} else if (descMap.cluster == "0201" && descMap.attrId == "001c") {
-			log.debug "MODE"
-			map.name = "thermostatMode"
-			map.value = getModeMap()[descMap.value]
-		} else if (descMap.cluster == "0204" && descMap.attrId == "0001") {
-			log.debug "LOCK LEVEL"
-			map.name = "lockLevel"
-			map.value = getLockMap()[descMap.value]
-		} else if (descMap.cluster == "0201" && descMap.attrId == "0029") {
-      log.debug "Mode Status"
-      map.name = "modeStatus"
-      map.value = getModeStatus(descMap.value)
+
+
+    if (descMap.cluster == "0201")
+		{
+			switch(descMap.attrId)
+			{
+        case "0000":
+  						log.trace "TEMP"
+  						map.name = "temperature"
+  						map.value = getTemperature(descMap.value)
+  					break;
+  				  case "0011":
+  						log.trace "COOLING SETPOINT"
+  						map.name = "coolingSetpoint"
+  						map.value = getTemperature(descMap.value)
+  					break;
+  					case "0012":
+  						log.trace "HEATING SETPOINT"
+  						map.name = "heatingSetpoint"
+  						map.value = getTemperature(descMap.value)
+  					break;
+  					case "001c":
+  						log.trace "MODE"
+  						map.name = "thermostatMode"
+  						map.value = getModeMap()[descMap.value]
+  					break;
+            case "0025":   // thermostat programming operation bitmap8
+  					log.trace "prorgamming Operation: ${descMap.value}"
+  					map.name = "prorgammingOperation"
+                      def val = getProgrammingMap()[Integer.parseInt(descMap.value, 16) & 0x01]
+  					sendEvent("name":"prorgammingOperationDisplay", "value": val)
+  					log.trace "prorgamming Operation is : ${val}"
+                      map.value = descMap.value
+  					break;
+            case "0029":
+              log.trace "MODE STATUS"
+              map.name = "modeStatus"
+              map.value = getModeStatus(descMap.value)
+            break;
+      }
+    } else if (descMap.cluster == "0204")
+    {
+      if (descMap.attrId == "0001")
+      {
+  			log.debug "LOCK LEVEL"
+  			map.name = "lockLevel"
+  			map.value = getLockMap()[descMap.value]
+      }
     }
-	}
+  }
 
 	def result = null
 	if (map) {
@@ -155,6 +208,11 @@ def parseDescriptionAsMap(description) {
 	}
 }
 
+def getProgrammingMap() { [
+	0:"Off",
+	1:"On"
+]}
+
 def getModeMap() { [
 	"00":"off",
 	"03":"cool",
@@ -165,6 +223,34 @@ def getFanModeMap() { [
 	"04":"fanOn",
 	"05":"fanAuto"
 ]}
+
+def Program()
+{
+	log.debug "Program"
+   	def currentSched = device.currentState("prorgammingOperation")?.value
+
+	log.debug "Program Hold ${currentSched}"
+
+
+    def next = Integer.parseInt(currentSched, 16);
+    if ( (next & 0x01) == 0x01)
+    	next = next & 0xfe;
+    else
+    	next = next | 0x01;
+
+	def nextSched = getProgrammingMap()[next & 0x01]
+
+	log.debug "switching Program from $currentSched to $nextSched next: $next"
+
+	//sendEvent("name":"prorgammingOperation", "value":next)
+    //sendEvent("name":"prorgammingOperationDisplay", "value":nextSched)
+
+    [
+    "st wattr 0x${device.deviceNetworkId} 1 0x201 0x25 0x18 {$next}", "delay 100" ,
+	"st rattr 0x${device.deviceNetworkId} 1 0x201 0x25", "delay 200",
+    ]
+}
+
 
 def getModeStatus(value)
 {
@@ -185,12 +271,14 @@ def refresh()
 {
 	log.debug "refresh called"
 	[
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0", "delay 200",
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x11", "delay 200",
-  		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x12", "delay 200",
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x1C", "delay 200",
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x29", "delay 200",
-        "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 200",
+		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x00", "delay 200",  // temperature
+		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x11", "delay 200",  // cooling setpoint
+  	"st rattr 0x${device.deviceNetworkId} 1 0x201 0x12", "delay 200",  // heating setpoint
+		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x1C", "delay 200",  // mode enum8
+    "st rattr 0x${device.deviceNetworkId} 1 0x201 0x25", "delay 200",  // thermostat programming operation bitmap8
+		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x29", "delay 200",  // hvac relay state bitmap
+    "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 200",  // lock status
+
 	]
 }
 
@@ -226,7 +314,7 @@ def setCoolingSetpoint(degrees) {
 	def celsius = (getTemperatureScale() == "C") ? degreesInteger : (fahrenheitToCelsius(degreesInteger) as Double).round(2)
 	[
     "st wattr 0x${device.deviceNetworkId} 1 0x201 0x11 0x29 {" + hex(celsius*100) + "}",
-  ] 
+  ]
   //+ setThermostatTime()
 }
 
@@ -398,10 +486,12 @@ def setThermostatTime()
 
 def configure() {
 
+  location.temperatureScale = "F"
+
 	log.debug "binding to Thermostat and UI cluster"
 	[
-		"zdo bind 0x${device.deviceNetworkId} 1 1 0x201 {${device.zigbeeId}} {}", "delay 200",
-		"zdo bind 0x${device.deviceNetworkId} 1 1 0x204 {${device.zigbeeId}} {}", "delay 200",
+	//	"zdo bind 0x${device.deviceNetworkId} 1 1 0x201 {${device.zigbeeId}} {}", "delay 200",
+//		"zdo bind 0x${device.deviceNetworkId} 1 1 0x204 {${device.zigbeeId}} {}", "delay 200",
         //"zcl global send-me-a-report [cluster:2] [attributeId:2] [dataType:1] [minReportTime:2] [maxReport-Time:2] [reportableChange:-1]"
   		"zcl global send-me-a-report 0x201 0x0000 0x29 20 0xffff {32}", "delay 100",  // report temperature changes over 1F
   		"send 0x${device.deviceNetworkId} 1 1", "delay 200",
