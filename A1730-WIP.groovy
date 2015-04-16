@@ -170,7 +170,7 @@ def parse(String description) {
             //log.debug "hex time: ${descMap.value}"
             	if (descMap.encoding ==  "23")
                 {
-            	    			map.name = "holdExpiary"
+            	    	map.name = "holdExpiary"
                   	map.value = convertToTime(descMap.value)
                     log.trace "HOLD EXPIRY: ${descMap.value} is ${map.value}"
 
@@ -277,12 +277,22 @@ def updateHoldLabel(attr, value)
     	currentHold = value
     }
 
+		boolean past = ((new Date(holdExp)).getTime() < (new Date().getTime()))
+
     if ("HoldExp" == attr)
     {
     	holdExp = value
+			past = ((new Date(value)).getTime() < (new Date().getTime()))
+			// in case currentHold is lagging, this means there actually is hold
+			if (!past)
+				currentHold = "On"
     }
 
-	def holdString = (currentHold == "On")? "Ends ${compareWithNow(holdExp)}" : ((currentHold == "Off")? " is Off" : " ...")
+
+
+	def holdString = (currentHold == "On")?
+			( (past)? "Is On" : "Ends ${compareWithNow(holdExp)}") :
+			((currentHold == "Off")? " is Off" : " ...")
     //log?.trace "HOLD STRING: ${holdString}"
 
     sendEvent("name":"setpointHoldDisplay", "value": "Hold ${holdString}")
