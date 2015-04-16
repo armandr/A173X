@@ -671,31 +671,31 @@ def setThermostatTime()
 
 def configure() {
 
-  location.temperatureScale = "F"
+ // location.temperatureScale = "F"
 
 	log.debug "binding to Thermostat and UI cluster"
 	[
-	//	"zdo bind 0x${device.deviceNetworkId} 1 1 0x201 {${device.zigbeeId}} {}", "delay 200",
-//		"zdo bind 0x${device.deviceNetworkId} 1 1 0x204 {${device.zigbeeId}} {}", "delay 200",
+			"zdo bind 0x${device.deviceNetworkId} 1 1 0x201 {${device.zigbeeId}} {}", "delay 200",
+			"zdo bind 0x${device.deviceNetworkId} 1 1 0x204 {${device.zigbeeId}} {}", "delay 200",
         //"zcl global send-me-a-report [cluster:2] [attributeId:2] [dataType:1] [minReportTime:2] [maxReport-Time:2] [reportableChange:-1]"
-  		"zcl global send-me-a-report 0x201 0x0000 0x29 20 0xffff {32}", "delay 100",  // report temperature changes over 1F
+  		"zcl global send-me-a-report 0x201 0x0000 0x29 20 30 {32}", "delay 100",  // report temperature changes over 1F
   		"send 0x${device.deviceNetworkId} 1 1", "delay 200",
-        "zcl global send-me-a-report 0x201 0x0011 0x29 20 0xffff {32}", "delay 300",  // report cooling setpoint
+        "zcl global send-me-a-report 0x201 0x0011 0x29 25 35 {32}", "delay 300",  // report cooling setpoint
   		"send 0x${device.deviceNetworkId} 1 1", "delay 400",
-        "zcl global send-me-a-report 0x201 0x0012 0x29 20 0xffff {32}", "delay 500",  // report heating setpoint
+        "zcl global send-me-a-report 0x201 0x0012 0x29 35 45 {32}", "delay 500",  // report heating setpoint
         "send 0x${device.deviceNetworkId} 1 1", "delay 600",
-        "zcl global send-me-a-report 0x201 0x001C 0x30 20 0xffff {32}", "delay 700",  // report mode
+        "zcl global send-me-a-report 0x201 0x001C 0x30 45 55 {32}", "delay 700",  // report mode
          "send 0x${device.deviceNetworkId} 1 1", "delay 800",
- /*       "zcl global send-me-a-report 0x201 0x0029 0x19 20 300", "delay 900",  	   // report relay status
+        "zcl global send-me-a-report 0x201 0x0029 0x19 20 30", "delay 900",  	   // report relay status
          "send 0x${device.deviceNetworkId} 1 1", "delay 1000",
-        "zcl global send-me-a-report 0x201 0x0030 0x30 20 300", "delay 1100",  	   // set point changed source
-         "send 0x${device.deviceNetworkId} 1 1", "delay 1200",
-        "zcl global send-me-a-report 0x201 0x0025 0x19 20 300 {32}", "delay 1300",	// schedule on/off
-         "send 0x${device.deviceNetworkId} 1 1", "delay 1400",
-*/      "zcl global send-me-a-report 0x201 0x0023 0x30 20 300", "delay 1500",		// hold
+//        "zcl global send-me-a-report 0x201 0x0030 0x30 20 300", "delay 1100",  	   // set point changed source
+//         "send 0x${device.deviceNetworkId} 1 1", "delay 1200",
+//        "zcl global send-me-a-report 0x201 0x0025 0x19 20 300 {32}", "delay 1300",	// schedule on/off
+//         "send 0x${device.deviceNetworkId} 1 1", "delay 1400",
+      	"zcl global send-me-a-report 0x201 0x0023 0x30 20 300", "delay 1500",		// hold
         "send 0x${device.deviceNetworkId} 1 1", "delay 1600",
-        "zcl global send-me-a-report 0x201 0x001E 0x30 20 300", "delay 1700",		// running mode
-        "send 0x${device.deviceNetworkId} 1 1", "delay 1800",
+//        "zcl global send-me-a-report 0x201 0x001E 0x30 20 300", "delay 1700",		// running mode
+//        "send 0x${device.deviceNetworkId} 1 1", "delay 1800",
 
 ]
 }
