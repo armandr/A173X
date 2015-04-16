@@ -30,6 +30,8 @@ metadata {
 	command "Hold"
   attribute "holdExpiary", "string"
 
+	attribute "lastTimeSync", "string"
+
 
 	fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0201,0204,0B05", outClusters: "000A, 0019"
 
@@ -456,10 +458,38 @@ def getModeStatus(value)
 	desc
 }
 
+def checkLastTimeSync(delay)
+{
+	def lastSync = device.currentState("lastTimeSync")?.value
+    if (!lastSync)
+    	lastSync = "${new Date(0)}"
+
+    if (settings.sync_clock ?: "No" && lastSync != new Date(0))
+    	{
+        	sendEvent("name":"lastTimeSync", "value":"${new Date(0)}")
+    	}
+
+
+
+	long duration = (new Date()).getTime() - (new Date(lastSync)).getTime()
+
+    log.debug "check Time: $lastSync duration: ${duration}"
+	if (duration > 86400000)
+		{
+			sendEvent("name":"lastTimeSync", "value":"${new Date()}")
+			return setThermostatTime()
+		}
+
+
+
+	return []
+}
 
 def refresh()
 {
 	log.debug "refresh called"
+
+	checkLastTimeSync(2000) +
 	[
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x00", "delay 200",  // temperature
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x11", "delay 200",  // cooling setpoint
@@ -510,7 +540,7 @@ def setCoolingSetpoint(degrees) {
 	[
     "st wattr 0x${device.deviceNetworkId} 1 0x201 0x11 0x29 {" + hex(celsius*100) + "}",
   ]
-  //+ setThermostatTime()
+
 }
 
 def modes() {
@@ -602,10 +632,21 @@ def fanAuto() {
 def updated()
 {
     log.debug "updated, scheduling set time"
+	def lastSync = device.currentState("lastTimeSync")?.value
+	log.debug "update last sync: $lastSync"
+    // reset the last sync time if this no
+	if ((settings.sync_clock ?: "No") == "No")
+			{
+            	log.debug "resetting last sync time.  Used to be: $lastSync"
+                // this sendevent does not get executed somehow
+                sendEvent("name":"lastTimeSync", "value":"${new Date(0)}")
+
+            }
     // run every two minutes
     //schedule("0 0/2 * * * ?", setThermostatTime)
     //unschedule()
     //log.trace "commands: "  + device
+
 }
 
 def getLockMap()
@@ -674,8 +715,8 @@ def setThermostatTime()
 
 	log.trace "time data: ${data}"
 	[
-  "raw 0x201 {04 21 11 00 02 0f 00 23 ${data} }", "delay 100",
-  "send 0x${device.deviceNetworkId} 1 1", "delay 200",
+  "raw 0x201 {04 21 11 00 02 0f 00 23 ${data} }",
+  "send 0x${device.deviceNetworkId} 1 1"
   ]
 }
 
