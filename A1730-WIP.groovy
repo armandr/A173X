@@ -303,14 +303,15 @@ def getSetPointHoldDuration()
     	holdTime = Integer.parseInt(settings.hold_time[0..1].trim()) * 24
     }
 
-    log.debug "hours : $holdTime"
     def currentHoldDuration = device.currentState("setpointHoldDuration")?.value
 
-    if (currentHoldDuration != (holdTime * 3600))
+ 	log.debug "hours : $holdTime and setpointhold $currentHoldDuration "
+
+    if (Short.parseShort(currentHoldDuration) != (holdTime * 60))
     {
     	[
         	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x24 0x21 {" +
-            String.format("%04X", holdTime * 3600) // this needs to be converted to correct endian
+            String.format("%04X", ((holdTime * 60) as Short))  // switch to zigbee endian
 
             + "}", "delay 100",
 			"st rattr 0x${device.deviceNetworkId} 1 0x201 0x24", "delay 200",
@@ -340,6 +341,8 @@ def Hold()
 
 	sendEvent("name":"setpointHold", "value":nextHold)
 
+	// set the duration first if it's changed
+	getSetPointHoldDuration() +
     [
     "st wattr 0x${device.deviceNetworkId} 1 0x201 0x23 0x30 {$next}", "delay 100" ,
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x23", "delay 300",
@@ -350,6 +353,7 @@ def Hold()
 
 def compareWithNow(d)
 {
+	log.trace "called Compare with: $d"
 	long mins = (new Date(d)).getTime() - (new Date()).getTime()
 
 	mins /= 1000 * 60;
@@ -364,18 +368,19 @@ def compareWithNow(d)
 
     log.trace "mins: ${mins}"
 
+    float t = 0;
 	// minutes
 	if (mins < 60)
 	{
 			ret +=  (mins as Integer) + " min" + ((mins > 1)? 's' : '')
 	}else if (mins < 1440)
 	{
-		mins = ((mins/60) as Integer)
-        ret += mins + " hr" +  ((mins > 1)? 's' : '')
+		t = ( Math.round((14 + mins)/30) as Integer) / 2
+        ret += t + " hr" +  ((t > 1)? 's' : '')
 	} else
     {
-		mins = ((mins/1440) as Integer)
-        ret +=  mins + " day" + ((mins > 1)? 's' : '')
+		t = (Math.round((359 + mins)/720) as Integer) / 2
+        ret +=  t + " day" + ((t > 1)? 's' : '')
 	}
     ret += (past)? " ago": ""
 
