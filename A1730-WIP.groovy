@@ -13,13 +13,16 @@ metadata {
 		capability "Configuration"
 		capability "Refresh"
 		capability "Sensor"
-        capability "Polling"
+    capability "Polling"
+
+		attribute "temperatureUnit","string"
+    attribute "displayTemperature","number"
 
     attribute "modeStatus", "string"
     attribute "lockLevel", "string"
 
-	command "setThermostatTime"
-  command "lock"
+		command "setThermostatTime"
+  	command "lock"
 
   attribute "prorgammingOperation", "number"
   attribute "prorgammingOperationDisplay", "string"
@@ -48,10 +51,12 @@ metadata {
         displayDuringSetup: true)
         input ("sync_clock", "boolean", title: "Synchronize Thermostat Clock Automatically?", options: ["Yes","No"])
         input ("lock_level", "enum", title: "Thermostat Screen Lock Level", options: ["Full","Mode Only", "Setpoint"])
+				input ("temp_unit", "enum", title: "Temperature Unit", options: ["Celsius","Fahrenheit"])
+
  	}
 
 	tiles {
-		valueTile("temperature", "device.temperature", width: 2, height: 2) {
+		valueTile("temperature", "displayTemperature", width: 2, height: 2) {
 			state("temperature", label:'${currentValue}°', unit:"F",
 				backgroundColors:[
         [value: 0, color: "#153591"],
@@ -166,7 +171,9 @@ def parse(String description) {
             case "0000":
   						log.trace "TEMP"
   						map.name = "temperature"
-  						map.value = getTemperature(descMap.value)
+  						map.value = descMap.value
+							sendEvent("name":"displayTemperature", "value": getDisplayTemperature(descMap.value))
+
   					break;
             case "0005":
             //log.debug "hex time: ${descMap.value}"
@@ -267,6 +274,23 @@ def getHoldMap()
 	"00":"Off",
 	"01":"On"
 ]}
+
+def getDisplayTemperature(value)
+{
+	def celsius = Integer.parseInt(value, 16);
+
+	log.trace "getting temperature: $celsius and unit: ${settings.temp_unit}";
+
+	if ((settings.temp_unit ?: "Fahrenheit") == "Celsius") {
+		celsius = (((celsius + 24) / 50) as Integer) / 2;
+	} else {
+		celsius = celsiusToFahrenheit(celsius/100) as Integer;
+	}
+
+	log.trace "getting temperature: " + celsius;
+
+	return celsius;
+}
 
 def updateHoldLabel(attr, value)
 {
@@ -464,7 +488,7 @@ def checkLastTimeSync(delay)
     if (!lastSync)
     	lastSync = "${new Date(0)}"
 
-    if (settings.sync_clock ?: "No" && lastSync != new Date(0))
+    if (settings.sync_clock ?: false && lastSync != new Date(0))
     	{
         	sendEvent("name":"lastTimeSync", "value":"${new Date(0)}")
     	}
@@ -473,7 +497,7 @@ def checkLastTimeSync(delay)
 
 	long duration = (new Date()).getTime() - (new Date(lastSync)).getTime()
 
-    log.debug "check Time: $lastSync duration: ${duration}"
+    log.debug "check Time: $lastSync duration: ${duration} settings.sync_clock: ${settings.sync_clock}"
 	if (duration > 86400000)
 		{
 			sendEvent("name":"lastTimeSync", "value":"${new Date()}")
@@ -514,6 +538,7 @@ def poll() {
 
 def getTemperature(value) {
 	def celsius = Integer.parseInt(value, 16) / 100
+
 	if(getTemperatureScale() == "C"){
 		return celsius as Integer
 	} else {
@@ -635,13 +660,13 @@ def updated()
 	def lastSync = device.currentState("lastTimeSync")?.value
 	log.debug "update last sync: $lastSync"
     // reset the last sync time if this no
-	if ((settings.sync_clock ?: "No") == "No")
+	if ((settings.sync_clock ?: false) == false)
 			{
             	log.debug "resetting last sync time.  Used to be: $lastSync"
                 // this sendevent does not get executed somehow
                 sendEvent("name":"lastTimeSync", "value":"${new Date(0)}")
 
-            }
+      }
     // run every two minutes
     //schedule("0 0/2 * * * ?", setThermostatTime)
     //unschedule()
@@ -684,7 +709,7 @@ def setThermostatTime()
 
   log.debug "setting time called.  Sending to: ${device.deviceNetworkId}"
 
-  if ((settings.sync_clock ?: "No") == "No")
+  if ((settings.sync_clock ?: false))
     {
       log.debug "sync time is disabled, leaving"
       return []
