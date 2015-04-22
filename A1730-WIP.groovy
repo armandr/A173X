@@ -142,7 +142,7 @@ metadata {
 
 		valueTile("setpoint", "displaySetpoint", width: 2, height: 2)
 		{
-			state("displaySetpoint", label: '${currentValue}',
+			state("displaySetpoint", label: '${currentValue}°',
 				backgroundColor: "#919191")
 		}
 
@@ -211,13 +211,13 @@ def parse(String description) {
   				  case "0011":
   						log.trace "COOLING SETPOINT"
   						map.name = "coolingSetpoint"
-  						map.value = getTemperature(descMap.value)
+  						map.value = getDisplayTemperature(descMap.value)
 							updateSetpoint()
   					break;
   					case "0012":
   						log.trace "HEATING SETPOINT"
   						map.name = "heatingSetpoint"
-  						map.value = getTemperature(descMap.value)
+  						map.value = getDisplayTemperature(descMap.value)
 							updateSetpoint()
   					break;
   					case "001c":
@@ -482,10 +482,17 @@ def Hold()
 	getSetPointHoldDuration() +
     [
     "st wattr 0x${device.deviceNetworkId} 1 0x201 0x23 0x30 {$next}", "delay 100" ,
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x23", "delay 300",
-    "raw 0x201 {04 21 11 00 00 05 00 }","delay 500",      // hold expiry time
-  	"send 0x${device.deviceNetworkId} 1 1", "delay 1000",
-    ]
+    "raw 0x201 {04 21 11 00 00 05 00 }","delay 200",      // hold expiry time
+  	"send 0x${device.deviceNetworkId} 1 1", "delay 200",
+    ] + readAttributesCommand(0x201, [
+				0x11,  //cooling set point
+				0x12,  //heating set point
+				0x1E,  //running mode
+				0x23,	 //setpoint hold
+				0x29,  //relay state
+				//0x30,  // set point change source
+				//0x32,  // set point change timestamp
+				])
 }
 
 def compareWithNow(d)
