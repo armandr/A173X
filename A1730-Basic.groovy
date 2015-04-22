@@ -17,8 +17,14 @@ metadata {
 
 		attribute "temperatureUnit","string"
     attribute "displayTemperature","number"
+		attribute "displaySetpoint", "string"
+		command 	"raiseSetpoint"
+		command 	"lowerSetpoint"
+		attribute "upButtonState", "string"
+		attribute "downButtonState", "string"
 
     attribute "modeStatus", "string"
+		attribute "runningMode", "string"
     attribute "lockLevel", "string"
 
 		command "setThermostatTime"
@@ -81,8 +87,9 @@ metadata {
 			state "off",   action:"thermostat.setThermostatMode", icon:"st.thermostat.heating-cooling-off"
 			state "cool",  action:"thermostat.setThermostatMode", icon:"st.thermostat.cool"
 			state "heat",  action:"thermostat.setThermostatMode", icon:"st.thermostat.heat"
-			state "emergencyHeat", label:'${name}', action:"thermostat.setThermostatMode", icon:"st.thermostat.auto"
+			state "auto",  action:"thermostat.setThermostatMode", icon:"st.thermostat.auto"
 		}
+
 		standardTile("fanMode", "device.thermostatFanMode", inactiveLabel: false, decoration: "flat") {
 			state "fanAuto", label:'${name}', action:"thermostat.setThermostatFanMode"
 			state "fanOn", label:'${name}', action:"thermostat.setThermostatFanMode"
@@ -133,15 +140,30 @@ metadata {
             state "setpointHold", action:"Hold", label: '${currentValue}'
 		}
 
+		valueTile("setpoint", "displaySetpoint", width: 2, height: 2)
+		{
+			state("displaySetpoint", label: '${currentValue}°',
+				backgroundColor: "#919191")
+		}
+
+				standardTile("upButton", "upButtonState", inactiveLabel: false) {
+			state "normal", action:"raiseSetpoint", backgroundColor:"#919191", icon:"st.thermostat.thermostat-up"
+			state "pressed", action:"raiseSetpoint", backgroundColor:"#ff0000", icon:"st.thermostat.thermostat-up"
+		}
+		standardTile("downButton", "downButtonState", inactiveLabel: false) {
+			state "normal", action:"lowerSetpoint", backgroundColor:"#919191", icon:"st.thermostat.thermostat-down"
+			state "pressed", action:"lowerSetpoint", backgroundColor:"#ff9191", icon:"st.thermostat.thermostat-down"
+		}
 
 
 		main "temperature"
 		details([
       "temperature", "mode", "hvacStatus",
+			"setpoint","upButton","downButton",
+			"scheduleText", "schedule",
+	    "hold",
     "heatSliderControl", "heatingSetpoint",
      "coolSliderControl", "coolingSetpoint",
-    "scheduleText", "schedule",
-    "hold",
      "lock", "refresh", "configure"])
 	}
 }
@@ -189,18 +211,27 @@ def parse(String description) {
   				  case "0011":
   						log.trace "COOLING SETPOINT"
   						map.name = "coolingSetpoint"
-  						map.value = getTemperature(descMap.value)
+  						map.value = getDisplayTemperature(descMap.value)
+							updateSetpoint()
   					break;
   					case "0012":
   						log.trace "HEATING SETPOINT"
   						map.name = "heatingSetpoint"
-  						map.value = getTemperature(descMap.value)
+  						map.value = getDisplayTemperature(descMap.value)
+							updateSetpoint()
   					break;
   					case "001c":
   						log.trace "MODE"
   						map.name = "thermostatMode"
   						map.value = getModeMap()[descMap.value]
+							updateSetpoint()
   					break;
+						case "001e":   //running mode enum8
+							log.trace "running mode: ${descMap.value}"
+		          map.name = "runningMode"
+							map.value = getModeMap()[descMap.value]
+							updateSetpoint()
+						break;
             case "0023":   // setpoint hold enum8
             log.trace "setpoint Hold: ${descMap.value}"
             map.name = "setpointHold"
@@ -222,6 +253,7 @@ def parse(String description) {
                       map.value = descMap.value
   					break;
             case "0029":
+							// relay state
               log.trace "MODE STATUS"
               map.name = "modeStatus"
               map.value = getModeStatus(descMap.value)
@@ -260,6 +292,7 @@ def getProgrammingMap() { [
 
 def getModeMap() { [
 	"00":"off",
+	"01":"auto",
 	"03":"cool",
 	"04":"heat"
 ]}
@@ -274,6 +307,74 @@ def getHoldMap()
 	"00":"Off",
 	"01":"On"
 ]}
+
+
+def updateSetpoint()
+{
+	def cool = device.currentState("coolingSetpoint")?.value
+	def heat = device.currentState("heatingSetpoint")?.value
+	def runningMode = device.currentState("runningMode")?.value
+	def mode = device.currentState("thermostatMode")?.value
+	log.trace "cool: $cool heat: $heat running mode: $runningMode mode: $mode"
+
+	def value = '--';
+
+	if ("heat"  == mode && heat != null)
+		value = heat;
+	else if ("cool"  == mode && cool != null)
+		value = cool;
+    else if ("auto" == mode && runningMode == "cool" && cool != null)
+    	value = cool;
+    else if ("auto" == mode && runningMode == "heat" && heat != null)
+    	value = heat;
+
+	sendEvent("name":"displaySetpoint", "value": value)
+}
+
+def raiseSetpoint()
+{
+	sendEvent("name":"upButtonState", "value": "pressed")
+	sendEvent("name":"upButtonState", "value": "normal")
+	adjustSetpoint(5)
+}
+
+def lowerSetpoint()
+{
+	sendEvent("name":"downButtonState", "value": "pressed")
+	sendEvent("name":"downButtonState", "value": "normal")
+	adjustSetpoint(-5)
+}
+
+def adjustSetpoint(value)
+{
+	def runningMode = device.currentState("runningMode")?.value
+	def mode = device.currentState("thermostatMode")?.value
+
+		//default to both heat and cool
+    def modeData = 0x02
+
+    if ("heat" == mode || "heat" == runningMode)
+    		modeData = "00"
+    else if ("cool" == mode || "cool" == runningMode)
+    	modeData = "01"
+
+    def amountData = String.format("%02X", value)[-2..-1]
+
+    log.debug "raise  mode: $modeData amout: $amountData"
+
+	[
+	"st cmd 0x${device.deviceNetworkId} 1 0x201 0 {" + modeData + " " + amountData + "}"
+	] + readAttributesCommand(0x201, [
+			0x11,  //cooling set point
+			0x12,  //heating set point
+			0x1E,  // setpoint hold
+			0x23,	 // running mode
+			0x29,  // relay state
+			//0x30,  // set point change source
+			//0x32,  // set point change timestamp
+			])
+}
+
 
 def getDisplayTemperature(value)
 {
@@ -381,10 +482,17 @@ def Hold()
 	getSetPointHoldDuration() +
     [
     "st wattr 0x${device.deviceNetworkId} 1 0x201 0x23 0x30 {$next}", "delay 100" ,
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x23", "delay 300",
-    "raw 0x201 {04 21 11 00 00 05 00 }","delay 500",      // hold expiry time
-  	"send 0x${device.deviceNetworkId} 1 1", "delay 1000",
-    ]
+    "raw 0x201 {04 21 11 00 00 05 00 }","delay 200",      // hold expiry time
+  	"send 0x${device.deviceNetworkId} 1 1", "delay 200",
+    ] + readAttributesCommand(0x201, [
+				0x11,  //cooling set point
+				0x12,  //heating set point
+				0x1E,  //running mode
+				0x23,	 //setpoint hold
+				0x29,  //relay state
+				//0x30,  // set point change source
+				//0x32,  // set point change timestamp
+				])
 }
 
 def compareWithNow(d)
@@ -461,9 +569,17 @@ def Program()
     //sendEvent("name":"prorgammingOperationDisplay", "value":nextSched)
 
     [
-    "st wattr 0x${device.deviceNetworkId} 1 0x201 0x25 0x18 {$next}", "delay 100" ,
-	"st rattr 0x${device.deviceNetworkId} 1 0x201 0x25", "delay 200",
-    ]
+    "st wattr 0x${device.deviceNetworkId} 1 0x201 0x25 0x18 {$next}", "delay 100"
+		] + readAttributesCommand(0x201, [
+			  0x25,  //programming operations
+				0x11,  //cooling set point
+				0x12,  //heating set point
+				0x1E,  // setpoint hold
+				0x23,	 // running mode
+				0x29,  // relay state
+				//0x30,  // set point change source
+				//0x32,  // set point change timestamp
+				])
 }
 
 
@@ -514,22 +630,59 @@ def refresh()
 	log.debug "refresh called"
 
 	checkLastTimeSync(2000) +
-	[
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x00", "delay 200",  // temperature
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x11", "delay 200",  // cooling setpoint
-  	"st rattr 0x${device.deviceNetworkId} 1 0x201 0x12", "delay 200",  // heating setpoint
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x1C", "delay 200",  // mode enum8
-    "st rattr 0x${device.deviceNetworkId} 1 0x201 0x23", "delay 200",  // setpoint hold enum8
-    "st rattr 0x${device.deviceNetworkId} 1 0x201 0x24", "delay 200",  // hold duration int16u
-    "st rattr 0x${device.deviceNetworkId} 1 0x201 0x25", "delay 200",  // thermostat programming operation bitmap8
-		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x29", "delay 200",  // hvac relay state bitmap
-    "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 200",  // lock status
-    "raw 0x201 {04 21 11 00 00 05 00 }"                , "delay 500",       // hold expiary
-    "send 0x${device.deviceNetworkId} 1 1"             , "delay 600",
-
-	]
+ 	readAttributesCommand(0x201, [
+			0x00,  // temperature
+			0x11,  // cooling set point
+			0x12,  // heating set point
+			0x1C,  // mode enum8
+			0x1E,  // running mode
+			0x23,	 // setpoint hold enum8
+			0x24,  // hold duration int16u
+			0x25,  // thermostat programming operation bitmap8
+			0x29,  // relay state bitmap8
+			//0x30,  // set point change source
+			//0x32,  // set point change timestamp
+			]) +
+			[
+	    "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 200",  // lock status
+	    "raw 0x201 {04 21 11 00 00 05 00 }"                , "delay 500",       // hold expiary
+	    "send 0x${device.deviceNetworkId} 1 1"             , "delay 600",
+			]
 }
 
+def readAttributesCommand(cluster, attribList)
+{
+	def attrString = ''
+
+
+	/*
+	// reading multiple attributes in one command currently
+	// causes parsing problems
+
+	for ( val in attribList ) {
+		//def val = Short.decode(i)
+    attrString += ' ' + String.format("%02X %02X", val & 0xff , (val >> 8) & 0xff)
+	}
+
+	log.trace "list: " + attrString
+
+	["raw "+ cluster + " {00 00 00 $attrString}","delay 500",
+	"send 0x${device.deviceNetworkId} 1 1", "delay 1000",
+	]
+	*/
+
+	def list = []
+	attrString =  "st rattr 0x${device.deviceNetworkId} 1 $cluster "
+
+	for ( val in attribList ) {
+		list.add(attrString + String.format("0x%02X", val))
+		list.add("delay 200")
+	}
+
+	log.trace "list: ${list}"
+
+	list
+}
 
 def poll() {
 	log.debug "Executing 'poll'"
@@ -554,7 +707,16 @@ def setHeatingSetpoint(degrees) {
 	sendEvent("name":"heatingSetpoint", "value":degreesInteger)
 
 	def celsius = (getTemperatureScale() == "C") ? degreesInteger : (fahrenheitToCelsius(degreesInteger) as Double).round(2)
+	[
 	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x12 0x29 {" + hex(celsius*100) + "}"
+	] + readAttributesCommand(0x201, [
+			0x12,  //heating set point
+			0x1E,  // setpoint hold
+			0x23,	 // running mode
+			0x29,  // relay state
+			//0x30,  // set point change source
+			//0x32,  // set point change timestamp
+			])
 }
 
 def setCoolingSetpoint(degrees) {
@@ -564,22 +726,18 @@ def setCoolingSetpoint(degrees) {
 	def celsius = (getTemperatureScale() == "C") ? degreesInteger : (fahrenheitToCelsius(degreesInteger) as Double).round(2)
 	[
     "st wattr 0x${device.deviceNetworkId} 1 0x201 0x11 0x29 {" + hex(celsius*100) + "}",
-  ]
-
+  ] + readAttributesCommand(0x201, [
+			0x11,  //cooling set point
+			0x1E,  // setpoint hold
+			0x23,	 // running mode
+			0x29,  // relay state
+			//0x30,  // set point change source
+			//0x32,  // set point change timestamp
+			])
 }
 
 def modes() {
-	["off", "heat", "cool"]
-}
-
-def setThermostatMode() {
-	log.debug "switching thermostatMode"
-	def currentMode = device.currentState("thermostatMode")?.value
-	def modeOrder = modes()
-	def index = modeOrder.indexOf(currentMode)
-	def next = index >= 0 && index < modeOrder.size() - 1 ? modeOrder[index + 1] : modeOrder[0]
-	log.debug "switching mode from $currentMode to $next"
-	"$next"()
+	["off", "heat", "cool", "auto"]
 }
 
 def setThermostatFanMode() {
@@ -600,9 +758,28 @@ def setThermostatFanMode() {
 	returnCommand
 }
 
-def setThermostatMode(String value) {
+def setThermostatMode() {
+	log.debug "switching thermostatMode"
+	def currentMode = device.currentState("thermostatMode")?.value
+	def modeOrder = modes()
+	def index = modeOrder.indexOf(currentMode)
+	def next = index >= 0 && index < modeOrder.size() - 1 ? modeOrder[index + 1] : modeOrder[0]
+	log.debug "switching mode from $currentMode to $next"
+
+	setThermostatMode(next)
+}
+
+def setThermostatMode(String next) {
+	def val = (getModeMap().find { it.value == next }?.key)?: "00"
+
+	sendEvent("name":"thermostatMode", "value":next)
+
 	log.debug "setThermostatMode({$value})"
-	"$value"()
+
+	[
+	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {$val}",
+	"delay 100"
+	] + readAttributesCommand(0x201, [0x11, 0x12, 0x1C, 0x1E, 0x23, 0x29, 0x30, 0x32])
 }
 
 def setThermostatFanMode(String value) {
@@ -611,27 +788,18 @@ def setThermostatFanMode(String value) {
 }
 
 def off() {
-	log.debug "off"
-	sendEvent("name":"thermostatMode", "value":"off")
-	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {00}"
+	setThermostatMode("off")
 }
 
 def cool() {
-	log.debug "cool"
-	sendEvent("name":"thermostatMode", "value":"cool")
-	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {03}"
-}
+	setThermostatMode("cool")}
 
 def heat() {
-	log.debug "heat"
-	sendEvent("name":"thermostatMode", "value":"heat")
-	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {04}"
+	setThermostatMode("heat")
 }
 
-def emergencyHeat() {
-	log.debug "emergencyHeat"
-	sendEvent("name":"thermostatMode", "value":"emergency heat")
-	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {05}"
+def auto() {
+	setThermostatMode("auto")
 }
 
 def on() {
@@ -644,9 +812,6 @@ def fanOn() {
 	"st wattr 0x${device.deviceNetworkId} 1 0x202 0 0x30 {04}"
 }
 
-def auto() {
-	fanAuto()
-}
 
 def fanAuto() {
 	log.debug "fanAuto"
