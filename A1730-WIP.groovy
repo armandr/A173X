@@ -383,9 +383,9 @@ def getDisplayTemperature(value)
 	log.trace "getting temperature: $celsius and unit: ${settings.temp_unit}";
 
 	if ((settings.temp_unit ?: "Fahrenheit") == "Celsius") {
-		celsius = (((celsius + 24) / 50) as Integer) / 2;
+		celsius = (((celsius + 4) / 10) as Integer) / 10;
 	} else {
-		celsius = celsiusToFahrenheit(celsius/100) as Integer;
+		celsius = (celsiusToFahrenheit(celsius/10) as Integer)/ 10;
 	}
 
 	log.trace "getting temperature: " + celsius;
