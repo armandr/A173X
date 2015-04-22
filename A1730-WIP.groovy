@@ -193,7 +193,7 @@ def parse(String description) {
             case "0000":
   						log.trace "TEMP"
   						map.name = "temperature"
-  						map.value = descMap.value
+  						map.value = getTemperature(descMap.value)
 							sendEvent("name":"displayTemperature", "value": getDisplayTemperature(descMap.value))
 
   					break;
