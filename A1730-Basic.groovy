@@ -37,7 +37,7 @@ metadata {
   attribute "setpointHold", "string"
 	attribute "setpointHoldDisplay", "string"
 	command "Hold"
-  attribute "holdExpiary", "string"
+  attribute "holdExpiary", "number"
 
 	attribute "lastTimeSync", "string"
 
@@ -54,7 +54,7 @@ metadata {
 		input ("hold_time", "enum", title: "Default Hold Time in Hours",
         description: "Default Hold Duration in hours",
         range: "1..24", options: ["No Hold", "2 Hours", "4 Hours", "8 Hours", "12 Hours", "1 Day"],
-        displayDuringSetup: true)
+        displayDuringSetup: false)
         input ("sync_clock", "boolean", title: "Synchronize Thermostat Clock Automatically?", options: ["Yes","No"])
         input ("lock_level", "enum", title: "Thermostat Screen Lock Level", options: ["Full","Mode Only", "Setpoint"])
 				input ("temp_unit", "enum", title: "Temperature Unit", options: ["Celsius","Fahrenheit"])
@@ -212,25 +212,25 @@ def parse(String description) {
   						log.trace "COOLING SETPOINT"
   						map.name = "coolingSetpoint"
   						map.value = getDisplayTemperature(descMap.value)
-							updateSetpoint()
+							updateSetpoint(map.name,map.value)
   					break;
   					case "0012":
   						log.trace "HEATING SETPOINT"
   						map.name = "heatingSetpoint"
   						map.value = getDisplayTemperature(descMap.value)
-							updateSetpoint()
+							updateSetpoint(map.name,map.value)
   					break;
   					case "001c":
   						log.trace "MODE"
   						map.name = "thermostatMode"
   						map.value = getModeMap()[descMap.value]
-							updateSetpoint()
+							updateSetpoint(map.name,map.value)
   					break;
 						case "001e":   //running mode enum8
 							log.trace "running mode: ${descMap.value}"
 		          map.name = "runningMode"
 							map.value = getModeMap()[descMap.value]
-							updateSetpoint()
+							updateSetpoint(map.name,map.value)
 						break;
             case "0023":   // setpoint hold enum8
             log.trace "setpoint Hold: ${descMap.value}"
@@ -309,7 +309,7 @@ def getHoldMap()
 ]}
 
 
-def updateSetpoint()
+def updateSetpoint(attrib, val)
 {
 	def cool = device.currentState("coolingSetpoint")?.value
 	def heat = device.currentState("heatingSetpoint")?.value
@@ -318,6 +318,7 @@ def updateSetpoint()
 	log.trace "cool: $cool heat: $heat running mode: $runningMode mode: $mode"
 
 	def value = '--';
+
 
 	if ("heat"  == mode && heat != null)
 		value = heat;
@@ -383,9 +384,9 @@ def getDisplayTemperature(value)
 	log.trace "getting temperature: $celsius and unit: ${settings.temp_unit}";
 
 	if ((settings.temp_unit ?: "Fahrenheit") == "Celsius") {
-		celsius = (((celsius + 24) / 50) as Integer) / 2;
+		celsius = (((celsius + 4) / 10) as Integer) / 10;
 	} else {
-		celsius = celsiusToFahrenheit(celsius/100) as Integer;
+		celsius = (celsiusToFahrenheit(celsius/10) as Integer)/ 10;
 	}
 
 	log.trace "getting temperature: " + celsius;
@@ -397,14 +398,18 @@ def updateHoldLabel(attr, value)
 {
 	def currentHold = (device?.currentState("setpointHold")?.value)?: "..."
 
-    def holdExp = (device?.currentState("holdExpiary")?.value)?: (new Date())
+    def holdExp = device?.currentState("holdExpiary")?.value
+		holdExp = holdExp?: "${(new Date()).getTime()}"
 
 	if ("Hold" == attr)
     {
     	currentHold = value
     }
 
-		boolean past = ((new Date(holdExp)).getTime() < (new Date().getTime()))
+
+		log.trace "holdexp ${holdExp} and ${(holdExp == null)} and ${new Date().getTime()}"
+
+		boolean past = ( (new Date(holdExp.toLong()).getTime())  < (new Date().getTime()))
 
     if ("HoldExp" == attr)
     {
@@ -686,7 +691,7 @@ def readAttributesCommand(cluster, attribList)
 
 def poll() {
 	log.debug "Executing 'poll'"
-	refresh()
+	//refresh()
 }
 
 def getTemperature(value) {
@@ -854,6 +859,9 @@ def lock()
 
 	def currentLock = device.currentState("lockLevel")?.value
   def val = getLockMap().find { it.value == currentLock }?.key
+
+	sendEvent("name":"holdExpiary", "value": null)
+
   log.debug "current lock is: ${val}"
 
   if (val == "00")
@@ -863,7 +871,7 @@ def lock()
 
   log.debug "sending ${val} as the new lock value"
 
-  ["st wattr 0x${device.deviceNetworkId} 1 0x204 1 0x30 {${val}}",
+  [ //"st wattr 0x${device.deviceNetworkId} 1 0x204 1 0x30 {${val}}",
    "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 500"
   ]
 }
@@ -919,24 +927,24 @@ def configure() {
 			"zdo bind 0x${device.deviceNetworkId} 1 1 0x201 {${device.zigbeeId}} {}", "delay 200",
 			"zdo bind 0x${device.deviceNetworkId} 1 1 0x204 {${device.zigbeeId}} {}", "delay 200",
         //"zcl global send-me-a-report [cluster:2] [attributeId:2] [dataType:1] [minReportTime:2] [maxReport-Time:2] [reportableChange:-1]"
-  		"zcl global send-me-a-report 0x201 0x0000 0x29 20 30 {32}", "delay 100",  // report temperature changes over 1F
+  		"zcl global send-me-a-report 0x201 0x0000 0x29 20 0xffff {32}", "delay 100",  // report temperature changes over 1F
   		"send 0x${device.deviceNetworkId} 1 1", "delay 200",
-        "zcl global send-me-a-report 0x201 0x0011 0x29 25 35 {32}", "delay 300",  // report cooling setpoint
+        "zcl global send-me-a-report 0x201 0x0011 0x29 25 0xffff {32}", "delay 300",  // report cooling setpoint
   		"send 0x${device.deviceNetworkId} 1 1", "delay 400",
-        "zcl global send-me-a-report 0x201 0x0012 0x29 35 45 {32}", "delay 500",  // report heating setpoint
+        "zcl global send-me-a-report 0x201 0x0012 0x29 35 0xffff {32}", "delay 500",  // report heating setpoint
         "send 0x${device.deviceNetworkId} 1 1", "delay 600",
-        "zcl global send-me-a-report 0x201 0x001C 0x30 45 55 {32}", "delay 700",  // report mode
+        "zcl global send-me-a-report 0x201 0x001C 0x30 45 1000", "delay 700",  // report mode
          "send 0x${device.deviceNetworkId} 1 1", "delay 800",
-        "zcl global send-me-a-report 0x201 0x0029 0x19 20 30", "delay 900",  	   // report relay status
+        "zcl global send-me-a-report 0x201 0x0029 0x19 20 0xffff", "delay 900",  	   // report relay status
          "send 0x${device.deviceNetworkId} 1 1", "delay 1000",
-//        "zcl global send-me-a-report 0x201 0x0030 0x30 20 300", "delay 1100",  	   // set point changed source
-//         "send 0x${device.deviceNetworkId} 1 1", "delay 1200",
-//        "zcl global send-me-a-report 0x201 0x0025 0x19 20 300 {32}", "delay 1300",	// schedule on/off
-//         "send 0x${device.deviceNetworkId} 1 1", "delay 1400",
-      	"zcl global send-me-a-report 0x201 0x0023 0x30 20 300", "delay 1500",		// hold
+        "zcl global send-me-a-report 0x201 0x0030 0x30 20 0xffff", "delay 1100",  	   // set point changed source
+         "send 0x${device.deviceNetworkId} 1 1", "delay 1200",
+        "zcl global send-me-a-report 0x201 0x0025 0x19 20 0xffff {32}", "delay 1300",	// schedule on/off
+         "send 0x${device.deviceNetworkId} 1 1", "delay 1400",
+      	"zcl global send-me-a-report 0x201 0x0023 0x30 20 0xffff", "delay 1500",		// hold
         "send 0x${device.deviceNetworkId} 1 1", "delay 1600",
-//        "zcl global send-me-a-report 0x201 0x001E 0x30 20 300", "delay 1700",		// running mode
-//        "send 0x${device.deviceNetworkId} 1 1", "delay 1800",
+        "zcl global send-me-a-report 0x201 0x001E 0x30 20 0xffff", "delay 1700",		// running mode
+        "send 0x${device.deviceNetworkId} 1 1", "delay 1800",
 
 ]
 }

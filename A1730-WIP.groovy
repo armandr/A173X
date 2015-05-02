@@ -41,6 +41,12 @@ metadata {
 
 	attribute "lastTimeSync", "string"
 
+	attribute "target", "number"
+	attribute "duty", "number"
+	attribute "gain", "number"
+	attribute "integrator", "number"
+	attribute "hvacstate", "number"
+
 
 	fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0201,0204,0B05", outClusters: "000A, 0019"
 
@@ -208,6 +214,33 @@ def parse(String description) {
                     updateHoldLabel("HoldExp", "${map.value}")
   				}
             break;
+						case "0008":
+						log.trace "mfg target"
+						map.name = "target"
+						map.value = Integer.parseInt(descMap.value, 16)
+						break;
+						case "0009":
+						log.trace "mfg duty"
+						map.name = "duty"
+						map.value = Integer.parseInt(descMap.value, 16)
+						break;
+						case "000A":
+						log.trace "integrator"
+						map.name = "integrator"
+						map.value = Integer.parseInt(descMap.value, 16)
+						break;
+						case "000B":
+						log.trace "gain"
+						map.name = "gain"
+						map.value = Integer.parseInt(descMap.value, 16)
+						break;
+						case "000C":
+						log.trace "hvacstate"
+						map.name = "hvacstate"
+						map.value = Integer.parseInt(descMap.value, 16)
+						hvacstate
+						break;
+
   				  case "0011":
   						log.trace "COOLING SETPOINT"
   						map.name = "coolingSetpoint"
@@ -684,9 +717,26 @@ def readAttributesCommand(cluster, attribList)
 	list
 }
 
+def readHvacData()
+{
+	[
+	"raw 0x201 {04 21 11 00 00 08 00 }",      // target
+	"send 0x${device.deviceNetworkId} 1 1",
+	"raw 0x201 {04 21 11 00 00 09 00 }",      // duty
+	"send 0x${device.deviceNetworkId} 1 1",
+	"raw 0x201 {04 21 11 00 00 0A 00 }",      // integrator
+	"send 0x${device.deviceNetworkId} 1 1",
+	"raw 0x201 {04 21 11 00 00 0B 00 }",      // gain
+	"send 0x${device.deviceNetworkId} 1 1",
+	"raw 0x201 {04 21 11 00 00 0C 00 }",      // hvac
+	"send 0x${device.deviceNetworkId} 1 1",
+
+	]
+}
+
 def poll() {
 	log.debug "Executing 'poll'"
-	refresh()
+	readHvacData()
 }
 
 def getTemperature(value) {
