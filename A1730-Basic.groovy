@@ -208,7 +208,7 @@ def parse(String description) {
             	if (descMap.encoding ==  "23")
                 {
             	    	map.name = "holdExpiary"
-                  	map.value = convertToTime(descMap.value)
+                  	map.value = "${convertToTime(descMap.value).getTime()}"
                     log.trace "HOLD EXPIRY: ${descMap.value} is ${map.value}"
 
                     updateHoldLabel("HoldExp", "${map.value}")
@@ -442,21 +442,21 @@ def updateHoldLabel(attr, value)
 
 		log.trace "holdexp ${holdExp} and ${(holdExp == null)} and ${new Date().getTime()}"
 
+		if ("HoldExp" == attr)
+		{
+			holdExp = value
+		}
 		boolean past = ( (new Date(holdExp.toLong()).getTime())  < (new Date().getTime()))
 
-    if ("HoldExp" == attr)
-    {
-    	holdExp = value
-			past = ((new Date(value)).getTime() < (new Date().getTime()))
-			// in case currentHold is lagging, this means there actually is hold
+		if ("HoldExp" == attr)
+		{
+  			// in case currentHold is lagging, this means there actually is hold
 			if (!past)
 				currentHold = "On"
     }
 
-
-
 	def holdString = (currentHold == "On")?
-			( (past)? "Is On" : "Ends ${compareWithNow(holdExp)}") :
+			( (past)? "Is On" : "Ends ${compareWithNow(holdExp.toLong())}") :
 			((currentHold == "Off")? " is Off" : " ...")
     //log?.trace "HOLD STRING: ${holdString}"
 
@@ -667,6 +667,8 @@ def refresh()
 {
 	log.debug "refresh called"
 
+	//sendEvent("name":"holdExpiary", "value": "")
+
 	checkLastTimeSync(2000) +
  	readAttributesCommand(0x201, [
 			0x00,  // temperature
@@ -722,9 +724,27 @@ def readAttributesCommand(cluster, attribList)
 	list
 }
 
+
+def readHvacData()
+{
+	[
+	"raw 0x201 {04 21 11 00 00 08 00 }",      // target
+	"send 0x${device.deviceNetworkId} 1 1",
+	"raw 0x201 {04 21 11 00 00 09 00 }",      // duty
+	"send 0x${device.deviceNetworkId} 1 1",
+	"raw 0x201 {04 21 11 00 00 0A 00 }",      // integrator
+	"send 0x${device.deviceNetworkId} 1 1",
+	"raw 0x201 {04 21 11 00 00 0B 00 }",      // gain
+	"send 0x${device.deviceNetworkId} 1 1",
+	"raw 0x201 {04 21 11 00 00 0C 00 }",      // hvac
+	"send 0x${device.deviceNetworkId} 1 1",
+	]
+}
+
 def poll() {
 	log.debug "Executing 'poll'"
 	//refresh()
+	readHvacData()
 }
 
 def getTemperature(value) {
@@ -893,7 +913,7 @@ def lock()
 	def currentLock = device.currentState("lockLevel")?.value
   def val = getLockMap().find { it.value == currentLock }?.key
 
-	sendEvent("name":"holdExpiary", "value": null)
+
 
   log.debug "current lock is: ${val}"
 
