@@ -15,15 +15,13 @@ metadata {
 		capability "Sensor"
     capability "Polling"
 
-		attribute "temperatureUnit","string"
-    attribute "displayTemperature","number"
+		attribute "displayTemperature","number"
 		attribute "displaySetpoint", "string"
 		command 	"raiseSetpoint"
 		command 	"lowerSetpoint"
 		attribute "upButtonState", "string"
 		attribute "downButtonState", "string"
 
-    attribute "modeStatus", "string"
 		attribute "runningMode", "string"
     attribute "lockLevel", "string"
 
@@ -63,8 +61,6 @@ metadata {
         displayDuringSetup: false)
         input ("sync_clock", "boolean", title: "Synchronize Thermostat Clock Automatically?", options: ["Yes","No"])
         input ("lock_level", "enum", title: "Thermostat Screen Lock Level", options: ["Full","Mode Only", "Setpoint"])
-				input ("temp_unit", "enum", title: "Temperature Unit", options: ["Celsius","Fahrenheit"])
-
  	}
 
 	tiles {
@@ -101,7 +97,7 @@ metadata {
 			state "fanOn", label:'${name}', action:"thermostat.setThermostatFanMode"
 		}
 
-    standardTile("hvacStatus", "modeStatus", inactiveLabel: false, decoration: "flat") {
+    standardTile("hvacStatus", "thermostatOperatingState", inactiveLabel: false, decoration: "flat") {
 				state "Resting",  label: 'Resting'
 				state "Heating",  icon:"st.thermostat.heating"
 				state "Cooling",  icon:"st.thermostat.cooling"
@@ -152,11 +148,11 @@ metadata {
 				backgroundColor: "#919191")
 		}
 
-				standardTile("upButton", "upButtonState", inactiveLabel: false) {
+				standardTile("upButton", "upButtonState", decoration: "flat", inactiveLabel: false) {
 			state "normal", action:"raiseSetpoint", backgroundColor:"#919191", icon:"st.thermostat.thermostat-up"
 			state "pressed", action:"raiseSetpoint", backgroundColor:"#ff0000", icon:"st.thermostat.thermostat-up"
 		}
-		standardTile("downButton", "downButtonState", inactiveLabel: false) {
+		standardTile("downButton", "downButtonState", decoration: "flat", inactiveLabel: false) {
 			state "normal", action:"lowerSetpoint", backgroundColor:"#919191", icon:"st.thermostat.thermostat-down"
 			state "pressed", action:"lowerSetpoint", backgroundColor:"#ff9191", icon:"st.thermostat.thermostat-down"
 		}
@@ -174,13 +170,29 @@ metadata {
 	}
 }
 
-
 def getMin() {
-	32
+	try
+	{
+	if (getTemperatureScale() == "C")
+	 	return 10
+	else
+		return 50
+	} catch (all)
+	{
+		return 10
+	}
 }
 
 def getMax() {
-	85
+	try {
+		if (getTemperatureScale() == "C")
+		return 30
+	else
+		return 86
+	} catch (all)
+	{
+		return 86
+	}
 }
 
 // parse events into attributes
@@ -188,6 +200,8 @@ def parse(String description) {
 	log.debug "Parse description $description"
 	def map = [:]
 	if (description?.startsWith("read attr -")) {
+
+		//TODO: Parse RAW strings for multiple attributes
 		def descMap = parseDescriptionAsMap(description)
 		log.debug "Desc Map: $descMap"
 
@@ -288,8 +302,8 @@ def parse(String description) {
             case "0029":
 							// relay state
               log.trace "MODE STATUS"
-              map.name = "modeStatus"
-              map.value = getModeStatus(descMap.value)
+              map.name = "thermostatOperatingState"
+              map.value = getThermostatOperatingState(descMap.value)
             break;
       }
     } else if (descMap.cluster == "0204")
@@ -412,19 +426,19 @@ def adjustSetpoint(value)
 
 def getDisplayTemperature(value)
 {
-	def celsius = Integer.parseInt(value, 16);
+	def t = Integer.parseInt(value, 16);
 
-	log.trace "getting temperature: $celsius and unit: ${settings.temp_unit}";
+	log.trace "getting temperature: $t and unit: ${	getTemperatureScale()}";
 
-	if ((settings.temp_unit ?: "Fahrenheit") == "Celsius") {
-		celsius = (((celsius + 4) / 10) as Integer) / 10;
+	if (getTemperatureScale() == "C") {
+		t = (((t + 4) / 10) as Integer) / 10;
 	} else {
-		celsius = (celsiusToFahrenheit(celsius/10) as Integer)/ 10;
+		t = (celsiusToFahrenheit(t/10) as Integer)/ 10;
 	}
 
-	log.trace "getting temperature: " + celsius;
+	log.trace "getting temperature: " + t;
 
-	return celsius;
+	return t;
 }
 
 def updateHoldLabel(attr, value)
@@ -621,10 +635,13 @@ def Program()
 }
 
 
-def getModeStatus(value)
+def getThermostatOperatingState(value)
 {
-	String[] m = [ "Heating", "Cooling", "Fan", "Heat2", "Cool2", "Fan2", "Fan3"]
-	String desc = 'Resting'
+	// ["idle", "fan only", "vent economizer", "cooling", "pending heat", "heating", "pending cool"]
+	// even though ModeStatus is not exactly the same as Operating State it's nice to match existing
+	// capability
+	String[] m = [ "heating", "cooling", "fan", "Heat2", "Cool2", "Fan2", "Fan3"]
+	String desc = 'idle'
 		value = Integer.parseInt(value, 16)
 
 		// only check for 1-stage  for A1730
@@ -694,8 +711,8 @@ def readAttributesCommand(cluster, attribList)
 {
 	def attrString = ''
 
+	def list = []
 
-	/*
 	// reading multiple attributes in one command currently
 	// causes parsing problems
 
@@ -704,14 +721,13 @@ def readAttributesCommand(cluster, attribList)
     attrString += ' ' + String.format("%02X %02X", val & 0xff , (val >> 8) & 0xff)
 	}
 
-	log.trace "list: " + attrString
+	//log.trace "list: " + attrString
 
-	["raw "+ cluster + " {00 00 00 $attrString}","delay 500",
-	"send 0x${device.deviceNetworkId} 1 1", "delay 1000",
-	]
-	*/
-
-	def list = []
+ /*
+	list.add("raw "+ cluster + " {00 00 00 $attrString}")
+	list.add("send 0x${device.deviceNetworkId} 1 1")
+	list.add("delay 200")
+*/
 	attrString =  "st rattr 0x${device.deviceNetworkId} 1 $cluster "
 
 	for ( val in attribList ) {
@@ -722,6 +738,7 @@ def readAttributesCommand(cluster, attribList)
 	log.trace "list: ${list}"
 
 	list
+
 }
 
 
@@ -738,6 +755,7 @@ def readHvacData()
 	"send 0x${device.deviceNetworkId} 1 1",
 	"raw 0x201 {04 21 11 00 00 0C 00 }",      // hvac
 	"send 0x${device.deviceNetworkId} 1 1",
+
 	]
 }
 
@@ -980,26 +998,23 @@ def configure() {
 			"zdo bind 0x${device.deviceNetworkId} 1 1 0x201 {${device.zigbeeId}} {}", "delay 200",
 			"zdo bind 0x${device.deviceNetworkId} 1 1 0x204 {${device.zigbeeId}} {}", "delay 200",
         //"zcl global send-me-a-report [cluster:2] [attributeId:2] [dataType:1] [minReportTime:2] [maxReport-Time:2] [reportableChange:-1]"
-  		"zcl global send-me-a-report 0x201 0x0000 0x29 20 0xffff {32}", "delay 100",  // report temperature changes over 1F
-  		"send 0x${device.deviceNetworkId} 1 1", "delay 200",
-        "zcl global send-me-a-report 0x201 0x0011 0x29 25 0xffff {32}", "delay 300",  // report cooling setpoint
-  		"send 0x${device.deviceNetworkId} 1 1", "delay 400",
-        "zcl global send-me-a-report 0x201 0x0012 0x29 35 0xffff {32}", "delay 500",  // report heating setpoint
-        "send 0x${device.deviceNetworkId} 1 1", "delay 600",
-        "zcl global send-me-a-report 0x201 0x001C 0x30 45 1000", "delay 700",  // report mode
-         "send 0x${device.deviceNetworkId} 1 1", "delay 800",
-        "zcl global send-me-a-report 0x201 0x0029 0x19 20 0xffff", "delay 900",  	   // report relay status
-         "send 0x${device.deviceNetworkId} 1 1", "delay 1000",
-        "zcl global send-me-a-report 0x201 0x0030 0x30 20 0xffff", "delay 1100",  	   // set point changed source
-         "send 0x${device.deviceNetworkId} 1 1", "delay 1200",
-        "zcl global send-me-a-report 0x201 0x0025 0x19 20 0xffff {32}", "delay 1300",	// schedule on/off
-         "send 0x${device.deviceNetworkId} 1 1", "delay 1400",
-      	"zcl global send-me-a-report 0x201 0x0023 0x30 20 0xffff", "delay 1500",		// hold
-        "send 0x${device.deviceNetworkId} 1 1", "delay 1600",
-        "zcl global send-me-a-report 0x201 0x001E 0x30 20 0xffff", "delay 1700",		// running mode
-        "send 0x${device.deviceNetworkId} 1 1", "delay 1800",
-
-]
+  		"zcl global send-me-a-report 0x201 0x0000 0x29 20 300 {19 00}", // report temperature changes over 0.2C
+  		"send 0x${device.deviceNetworkId} 1 1",
+			"zcl global send-me-a-report 0x201 0x001C 0x30 1 305 { }", // mode
+			"send 0x${device.deviceNetworkId} 1 1",
+			"zcl global send-me-a-report 0x201 0x0025 0x18 1 310 { 00 }", // schedule on/off
+			"send 0x${device.deviceNetworkId} 1 1",
+			"zcl global send-me-a-report 0x201 0x001E 0x30 1 315 { 00 }", // running mode
+			"send 0x${device.deviceNetworkId} 1 1",
+			"zcl global send-me-a-report 0x201 0x0011 0x29 1 320 {32 00}", // cooling setpoint delta: 0.5C (0x3200 in little endian)
+			"send 0x${device.deviceNetworkId} 1 1",
+			"zcl global send-me-a-report 0x201 0x0012 0x29 1 320 {32 00}", // cooling setpoint delta: 0.5C (0x3200 in little endian)
+			"send 0x${device.deviceNetworkId} 1 1",
+			"zcl global send-me-a-report 0x201 0x0029 0x19 1 325 { 00 }",  // relay status
+			"send 0x${device.deviceNetworkId} 1 1",
+			"zcl global send-me-a-report 0x201 0x0023 0x30 1 330 { 00 }",		// hold
+        "send 0x${device.deviceNetworkId} 1 1",
+	] + refresh()
 }
 
 private hex(value) {
