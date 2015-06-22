@@ -40,12 +40,7 @@ metadata {
 
 	attribute "lastTimeSync", "string"
 
-	attribute "target", "number"
-	attribute "duty", "number"
-	attribute "gain", "number"
-	attribute "integrator", "number"
-	attribute "hvacstate", "number"
-
+	attribute "thermostatOperatingState", "string"
 
 	fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0201,0204,0B05", outClusters: "000A, 0019"
 
@@ -212,7 +207,6 @@ def parse(String description) {
 			switch(descMap.attrId)
 			{
             case "0000":
-  						log.trace "TEMP"
   						map.name = "temperature"
   						map.value = getTemperature(descMap.value)
 							sendEvent("name":"displayTemperature", "value": getDisplayTemperature(descMap.value))
@@ -227,82 +221,46 @@ def parse(String description) {
                     log.trace "HOLD EXPIRY: ${descMap.value} is ${map.value}"
 
                     updateHoldLabel("HoldExp", "${map.value}")
-  				}
+  							}
             break;
-						case "0008":
-						log.trace "mfg target"
-						map.name = "target"
-						map.value = Integer.parseInt(descMap.value, 16)
-						break;
-						case "0009":
-						log.trace "mfg duty"
-						map.name = "duty"
-						map.value = Integer.parseInt(descMap.value, 16)
-						break;
-						case "000A":
-						log.trace "integrator"
-						map.name = "integrator"
-						map.value = Integer.parseInt(descMap.value, 16)
-						break;
-						case "000B":
-						log.trace "gain"
-						map.name = "gain"
-						map.value = Integer.parseInt(descMap.value, 16)
-						break;
-						case "000C":
-						log.trace "hvacstate"
-						map.name = "hvacstate"
-						map.value = Integer.parseInt(descMap.value, 16)
-						hvacstate
-						break;
-
   				  case "0011":
-  						log.trace "COOLING SETPOINT"
   						map.name = "coolingSetpoint"
   						map.value = getDisplayTemperature(descMap.value)
 							updateSetpoint(map.name,map.value)
   					break;
   					case "0012":
-  						log.trace "HEATING SETPOINT"
   						map.name = "heatingSetpoint"
   						map.value = getDisplayTemperature(descMap.value)
 							updateSetpoint(map.name,map.value)
   					break;
   					case "001c":
-  						log.trace "MODE"
   						map.name = "thermostatMode"
   						map.value = getModeMap()[descMap.value]
 							updateSetpoint(map.name,map.value)
   					break;
 						case "001e":   //running mode enum8
-							log.trace "running mode: ${descMap.value}"
 		          map.name = "runningMode"
 							map.value = getModeMap()[descMap.value]
 							updateSetpoint(map.name,map.value)
 						break;
             case "0023":   // setpoint hold enum8
-            log.trace "setpoint Hold: ${descMap.value}"
             map.name = "setpointHold"
             map.value = getHoldMap()[descMap.value]
             updateHoldLabel("Hold", map.value)
             break;
             case "0024":   // hold duration int16u
-            log.trace "setpoint Hold Duration: ${descMap.value}"
             map.name = "setpointHoldDuration"
             map.value = Integer.parseInt(descMap.value, 16)
             //sendEvent("name":"setpointHoldDurationDisplay", "value": timeLength(map.value))
             break;
             case "0025":   // thermostat programming operation bitmap8
-  					log.trace "prorgamming Operation: ${descMap.value}"
   					map.name = "prorgammingOperation"
                       def val = getProgrammingMap()[Integer.parseInt(descMap.value, 16) & 0x01]
   					sendEvent("name":"prorgammingOperationDisplay", "value": val)
-  					log.trace "prorgamming Operation is : ${val}"
-                      map.value = descMap.value
+            map.value = descMap.value
   					break;
             case "0029":
 							// relay state
-              log.trace "MODE STATUS"
               map.name = "thermostatOperatingState"
               map.value = getThermostatOperatingState(descMap.value)
             break;
@@ -311,7 +269,6 @@ def parse(String description) {
     {
       if (descMap.attrId == "0001")
       {
-  			log.debug "LOCK LEVEL"
   			map.name = "lockLevel"
   			map.value = getLockMap()[descMap.value]
       }
@@ -363,7 +320,7 @@ def updateSetpoint(attrib, val)
 	def heat = device.currentState("heatingSetpoint")?.value
 	def runningMode = device.currentState("runningMode")?.value
 	def mode = device.currentState("thermostatMode")?.value
-	log.trace "cool: $cool heat: $heat running mode: $runningMode mode: $mode"
+	//log.trace "cool: $cool heat: $heat running mode: $runningMode mode: $mode"
 
 	def value = '--';
 
@@ -409,7 +366,7 @@ def adjustSetpoint(value)
 
     def amountData = String.format("%02X", value)[-2..-1]
 
-    log.debug "raise  mode: $modeData amout: $amountData"
+    //log.debug "raise  mode: $modeData amout: $amountData"
 
 	[
 	"st cmd 0x${device.deviceNetworkId} 1 0x201 0 {" + modeData + " " + amountData + "}"
@@ -429,15 +386,13 @@ def getDisplayTemperature(value)
 {
 	def t = Integer.parseInt(value, 16);
 
-	log.trace "getting temperature: $t and unit: ${	getTemperatureScale()}";
-
 	if (getTemperatureScale() == "C") {
 		t = (((t + 4) / 10) as Integer) / 10;
 	} else {
 		t = (celsiusToFahrenheit(t/10) as Integer)/ 10;
 	}
 
-	log.trace "getting temperature: " + t;
+	//log.trace "getting temperature: " + t;
 
 	return t;
 }
@@ -454,8 +409,7 @@ def updateHoldLabel(attr, value)
     	currentHold = value
     }
 
-
-		log.trace "holdexp ${holdExp} and ${(holdExp == null)} and ${new Date().getTime()}"
+	  //log.trace "holdexp ${holdExp} and ${(holdExp == null)} and ${new Date().getTime()}"
 
 		if ("HoldExp" == attr)
 		{
@@ -473,7 +427,6 @@ def updateHoldLabel(attr, value)
 	def holdString = (currentHold == "On")?
 			( (past)? "Is On" : "Ends ${compareWithNow(holdExp.toLong())}") :
 			((currentHold == "Off")? " is Off" : " ...")
-    //log?.trace "HOLD STRING: ${holdString}"
 
     sendEvent("name":"setpointHoldDisplay", "value": "Hold ${holdString}")
 }
@@ -481,8 +434,6 @@ def updateHoldLabel(attr, value)
 def getSetPointHoldDuration()
 {
 	def holdTime = 0
-
-    log.debug "settings : ${settings.hold_time[0..1]}"
 
     if (settings.hold_time.contains("Hours"))
     {
@@ -495,7 +446,7 @@ def getSetPointHoldDuration()
 
     def currentHoldDuration = device.currentState("setpointHoldDuration")?.value
 
- 	log.debug "hours : $holdTime and setpointhold $currentHoldDuration "
+ 	  //log.debug "hours : $holdTime and setpointhold $currentHoldDuration "
 
     if (Short.parseShort(currentHoldDuration) != (holdTime * 60))
     {
@@ -516,18 +467,12 @@ def getSetPointHoldDuration()
 
 def Hold()
 {
-	log.trace "hold dur " + getSetPointHoldDuration()
+	//log.trace "hold dur " + getSetPointHoldDuration()
 
-	log.debug "Flip Hold "
 	def currentHold = device.currentState("setpointHold")?.value
-
-	log.debug "current Hold ${currentHold}"
-
 
 	def next = (currentHold == "On") ? "00" : "01"
 	def nextHold = getHoldMap()[next]
-
-	log.debug "switching hold from $currentHold to $nextHold next: $next"
 
 	sendEvent("name":"setpointHold", "value":nextHold)
 
@@ -550,7 +495,6 @@ def Hold()
 
 def compareWithNow(d)
 {
-	log.trace "called Compare with: $d"
 	long mins = (new Date(d)).getTime() - (new Date()).getTime()
 
 	mins /= 1000 * 60;
@@ -562,8 +506,6 @@ def compareWithNow(d)
 
     if (past)
     	mins *= -1;
-
-    log.trace "mins: ${mins}"
 
     float t = 0;
 	// minutes
@@ -602,13 +544,9 @@ def convertToTime(data)
 
 def Program()
 {
-	log.debug "Program"
    	def currentSched = device.currentState("prorgammingOperation")?.value
 
-	log.debug "Program Hold ${currentSched}"
-
-
-    def next = Integer.parseInt(currentSched, 16);
+  def next = Integer.parseInt(currentSched, 16);
     if ( (next & 0x01) == 0x01)
     	next = next & 0xfe;
     else
@@ -616,10 +554,7 @@ def Program()
 
 	def nextSched = getProgrammingMap()[next & 0x01]
 
-	log.debug "switching Program from $currentSched to $nextSched next: $next"
-
-	//sendEvent("name":"prorgammingOperation", "value":next)
-    //sendEvent("name":"prorgammingOperationDisplay", "value":nextSched)
+	//log.debug "switching Program from $currentSched to $nextSched next: $next"
 
     [
     "st wattr 0x${device.deviceNetworkId} 1 0x201 0x25 0x18 {$next}", "delay 100"
@@ -669,23 +604,19 @@ def checkLastTimeSync(delay)
 
 	long duration = (new Date()).getTime() - (new Date(lastSync)).getTime()
 
-    log.debug "check Time: $lastSync duration: ${duration} settings.sync_clock: ${settings.sync_clock}"
+  //  log.debug "check Time: $lastSync duration: ${duration} settings.sync_clock: ${settings.sync_clock}"
 	if (duration > 86400000)
 		{
 			sendEvent("name":"lastTimeSync", "value":"${new Date()}")
 			return setThermostatTime()
 		}
 
-
-
 	return []
 }
 
 def refresh()
 {
-	log.debug "refresh called"
-
-	//sendEvent("name":"holdExpiary", "value": "")
+	//log.debug "refresh called"
 
 	checkLastTimeSync(2000) +
  	readAttributesCommand(0x201, [
@@ -722,13 +653,6 @@ def readAttributesCommand(cluster, attribList)
     attrString += ' ' + String.format("%02X %02X", val & 0xff , (val >> 8) & 0xff)
 	}
 
-	//log.trace "list: " + attrString
-
- /*
-	list.add("raw "+ cluster + " {00 00 00 $attrString}")
-	list.add("send 0x${device.deviceNetworkId} 1 1")
-	list.add("delay 200")
-*/
 	attrString =  "st rattr 0x${device.deviceNetworkId} 1 $cluster "
 
 	for ( val in attribList ) {
@@ -762,7 +686,6 @@ def setHeatingSetpoint(degrees) {
 	def temperatureScale = getTemperatureScale()
 
 	def degreesInteger = degrees as Integer
-	log.debug "setHeatingSetpoint({$degreesInteger} ${temperatureScale})"
 	sendEvent("name":"heatingSetpoint", "value":degreesInteger)
 
 	def celsius = (getTemperatureScale() == "C") ? degreesInteger : (fahrenheitToCelsius(degreesInteger) as Double).round(2)
@@ -780,7 +703,6 @@ def setHeatingSetpoint(degrees) {
 
 def setCoolingSetpoint(degrees) {
 	def degreesInteger = degrees as Integer
-	log.debug "setCoolingSetpoint({$degreesInteger} ${temperatureScale})"
 	sendEvent("name":"coolingSetpoint", "value":degreesInteger)
 	def celsius = (getTemperatureScale() == "C") ? degreesInteger : (fahrenheitToCelsius(degreesInteger) as Double).round(2)
 	[
@@ -800,9 +722,8 @@ def modes() {
 }
 
 def setThermostatFanMode() {
-	log.debug "Switching fan mode"
 	def currentFanMode = device.currentState("thermostatFanMode")?.value
-	log.debug "switching fan from current mode: $currentFanMode"
+	//log.debug "switching fan from current mode: $currentFanMode"
 	def returnCommand
 
 	switch (currentFanMode) {
@@ -818,12 +739,11 @@ def setThermostatFanMode() {
 }
 
 def setThermostatMode() {
-	log.debug "switching thermostatMode"
 	def currentMode = device.currentState("thermostatMode")?.value
 	def modeOrder = modes()
 	def index = modeOrder.indexOf(currentMode)
 	def next = index >= 0 && index < modeOrder.size() - 1 ? modeOrder[index + 1] : modeOrder[0]
-	log.debug "switching mode from $currentMode to $next"
+//	log.debug "switching mode from $currentMode to $next"
 
 	setThermostatMode(next)
 }
@@ -833,7 +753,7 @@ def setThermostatMode(String next) {
 
 	sendEvent("name":"thermostatMode", "value":next)
 
-	log.debug "setThermostatMode({$value})"
+	//log.debug "setThermostatMode({$value})"
 
 	[
 	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {$val}",
@@ -866,23 +786,23 @@ def on() {
 }
 
 def fanOn() {
-	log.debug "fanOn"
+	//log.debug "fanOn"
 	sendEvent("name":"thermostatFanMode", "value":"fanOn")
 	"st wattr 0x${device.deviceNetworkId} 1 0x202 0 0x30 {04}"
 }
 
 
 def fanAuto() {
-	log.debug "fanAuto"
+	//log.debug "fanAuto"
 	sendEvent("name":"thermostatFanMode", "value":"fanAuto")
 	"st wattr 0x${device.deviceNetworkId} 1 0x202 0 0x30 {05}"
 }
 
 def updated()
 {
-    log.debug "updated, scheduling set time"
+  //  log.debug "updated, scheduling set time"
 	def lastSync = device.currentState("lastTimeSync")?.value
-	log.debug "update last sync: $lastSync"
+	// log.debug "update last sync: $lastSync"
     // reset the last sync time if this no
 	if ((settings.sync_clock ?: false) == false)
 			{
@@ -916,14 +836,14 @@ def lock()
 
 
 
-  log.debug "current lock is: ${val}"
+  //log.debug "current lock is: ${val}"
 
   if (val == "00")
       val = getLockMap().find { it.value == (settings.lock_level ?: "Full") }?.key
   else
       val = "00"
 
-  log.debug "sending ${val} as the new lock value"
+  //log.debug "sending ${val} as the new lock value"
 
   [ //"st wattr 0x${device.deviceNetworkId} 1 0x204 1 0x30 {${val}}",
    "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 500"
@@ -933,8 +853,6 @@ def lock()
 
 def setThermostatTime()
 {
-
-  log.debug "setting time called.  Sending to: ${device.deviceNetworkId}"
 
   if ((settings.sync_clock ?: false))
     {
@@ -951,7 +869,7 @@ def setThermostatTime()
   Date date = new Date();
   String zone = location.timeZone.getRawOffset() + " DST " + location.timeZone.getDSTSavings();
 
-	log.debug "sync time for ${device.deviceNetworkId} at ${date} location: ${zone}"
+	//log.debug "sync time for ${device.deviceNetworkId} at ${date} location: ${zone}"
 
 	long millis = date.getTime(); // Millis since Unix epoch
   millis -= 946684800000;  // adjust for ZigBee EPOCH
@@ -965,7 +883,7 @@ def setThermostatTime()
 	// hex capture for message format
   String data = " " + s.substring(6, 8) + " " + s.substring(4, 6) + " " + s.substring(2, 4)+ " " + s.substring(0, 2);
 
-	log.trace "time data: ${data}"
+	//log.trace "time data: ${data}"
 	[
   "raw 0x201 {04 21 11 00 02 0f 00 23 ${data} }",
   "send 0x${device.deviceNetworkId} 1 1"
@@ -974,13 +892,9 @@ def setThermostatTime()
 
 def configure() {
 
- // location.temperatureScale = "F"
-
-	log.debug "binding to Thermostat and UI cluster"
-	[
+ 	[
 			"zdo bind 0x${device.deviceNetworkId} 1 1 0x201 {${device.zigbeeId}} {}", "delay 200",
-			"zdo bind 0x${device.deviceNetworkId} 1 1 0x204 {${device.zigbeeId}} {}", "delay 200",
-        //"zcl global send-me-a-report [cluster:2] [attributeId:2] [dataType:1] [minReportTime:2] [maxReport-Time:2] [reportableChange:-1]"
+			       //"zcl global send-me-a-report [cluster:2] [attributeId:2] [dataType:1] [minReportTime:2] [maxReport-Time:2] [reportableChange:-1]"
   		"zcl global send-me-a-report 0x201 0x0000 0x29 20 300 {19 00}", // report temperature changes over 0.2C
   		"send 0x${device.deviceNetworkId} 1 1",
 			"zcl global send-me-a-report 0x201 0x001C 0x30 1 305 { }", // mode
@@ -996,7 +910,7 @@ def configure() {
 			"zcl global send-me-a-report 0x201 0x0029 0x19 1 325 { 00 }",  // relay status
 			"send 0x${device.deviceNetworkId} 1 1",
 			"zcl global send-me-a-report 0x201 0x0023 0x30 1 330 { 00 }",		// hold
-        "send 0x${device.deviceNetworkId} 1 1",
+        "send 0x${device.deviceNetworkId} 1 1"
 	] + refresh()
 }
 
