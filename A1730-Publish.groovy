@@ -385,11 +385,13 @@ def adjustSetpoint(value)
 def getDisplayTemperature(value)
 {
 	def t = Integer.parseInt(value, 16);
-
+    
+	//log.trace "getting temperature: C: " + t;
+    
 	if (getTemperatureScale() == "C") {
 		t = (((t + 4) / 10) as Integer) / 10;
 	} else {
-		t = (celsiusToFahrenheit(t/10) as Integer)/ 10;
+		t = ((10 *celsiusToFahrenheit(t/100)) as Integer)/ 10;
 	}
 
 	//log.trace "getting temperature: " + t;
@@ -660,7 +662,7 @@ def readAttributesCommand(cluster, attribList)
 		list.add("delay 200")
 	}
 
-	log.trace "list: ${list}"
+	//log.trace "list: ${list}"
 
 	list
 
