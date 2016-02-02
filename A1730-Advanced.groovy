@@ -500,6 +500,12 @@ def readAttributesCommand(cluster, attribList)
 	["raw "+ cluster + " {00 00 00 $attrString}","delay 500",
 	"send 0x${device.deviceNetworkId} 1 1", "delay 1000",
 	]
+
+  ["raw 0x201 {00000000001100}", "delay 100", //12001C001E002300240025002900}", "delay 100",
+	    "send 0x${device.deviceNetworkId} 1 1"             , "delay 200",
+	    ]
+
+
 	*/
 	def list = []
 	attrString =  "st rattr 0x${device.deviceNetworkId} 1 $cluster "
@@ -753,8 +759,8 @@ def refresh()
     "st rattr 0x${device.deviceNetworkId} 1 0x201 0x29", "delay 200",  // hvac relay state bitmap
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x30", "delay 200",  // setpoint change source enum8
 		"st rattr 0x${device.deviceNetworkId} 1 0x201 0x32", "delay 200",  // setpoint change source UTC time
-		"st rattr 0x${device.deviceNetworkId} 1 0x204 0x00", "delay 200",	// temperature unit
-        "raw 0x201 {04 21 11 00 00 05 00 }","delay 500", "delay 500",       // hold expiary
+		"st rattr 0x${device.deviceNetworkId} 1 0x204 0x00", "delay 200",	 // temperature unit
+        "raw 0x201 {04 21 11 00 00 05 00 }","delay 500", "delay 500",  // hold expiary
   		"send 0x${device.deviceNetworkId} 1 1", "delay 1000",
 	]
 }

@@ -3,18 +3,19 @@
  *
  *	Author: Fidure
  *	Date: 2014-12-13
- *  Updated: 2015-04-11
+ *  Updated: 2015-12-29
  */
 metadata {
 	// Automatically generated. Make future change here.
 	definition (name: "Fidure Thermostat", namespace: "smartthings", author: "SmartThings") {
-		capability "Actuator"
+
+        capability "Actuator"
 		capability "Temperature Measurement"
 		capability "Thermostat"
 		capability "Configuration"
 		capability "Refresh"
 		capability "Sensor"
-    capability "Polling"
+        capability "Polling"
 
 		attribute "displayTemperature","number"
 		attribute "displaySetpoint", "string"
@@ -24,25 +25,25 @@ metadata {
 		attribute "downButtonState", "string"
 
 		attribute "runningMode", "string"
-    attribute "lockLevel", "string"
+    	attribute "lockLevel", "string"
 
 		command "setThermostatTime"
-  	command "lock"
+  		command "lock"
 
-  attribute "prorgammingOperation", "number"
-  attribute "prorgammingOperationDisplay", "string"
-  command   "Program"
+ 		attribute "prorgammingOperation", "number"
+  		attribute "prorgammingOperationDisplay", "string"
+  		command   "Program"
 
-  attribute "setpointHold", "string"
-	attribute "setpointHoldDisplay", "string"
-	command "Hold"
-  attribute "holdExpiary", "string"
+  		attribute "setpointHold", "string"
+		attribute "setpointHoldDisplay", "string"
+		command "Hold"
+  		attribute "holdExpiary", "string"
 
-	attribute "lastTimeSync", "string"
+		attribute "lastTimeSync", "string"
 
-	attribute "thermostatOperatingState", "string"
+		attribute "thermostatOperatingState", "string"
 
-	fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0201,0204,0B05", outClusters: "000A, 0019"
+		fingerprint profileId: "0104", inClusters: "0000,0003,0004,0005,0201,0204,0B05", outClusters: "000A, 0019"
 
 	}
 
@@ -107,14 +108,12 @@ metadata {
         state "Full",  action:"lock", label:'${name}'
     }
 
-		controlTile("heatSliderControl", "device.heatingSetpoint", "slider", height: 1, width: 2, inactiveLabel: false, range: "$min..$max") {
-			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint", backgroundColor:"#d04e00"
+		controlTile("heatSliderControl", "device.heatingSetpoint", "slider", height: 1, width: 2, inactiveLabel: false, range: "$min..$max") {			state "setHeatingSetpoint", action:"thermostat.setHeatingSetpoint", backgroundColor:"#d04e00"
 		}
 		valueTile("heatingSetpoint", "device.heatingSetpoint", inactiveLabel: false, decoration: "flat") {
 			state "heat", label:'${currentValue}° heat', unit:"F", backgroundColor:"#ffffff"
 		}
-		controlTile("coolSliderControl", "device.coolingSetpoint", "slider", height: 1, width: 2, inactiveLabel: false, range: "$min..$max") {
-			state "setCoolingSetpoint", action:"thermostat.setCoolingSetpoint", backgroundColor: "#1e9cbb"
+		controlTile("coolSliderControl", "device.coolingSetpoint", "slider", height: 1, width: 2, inactiveLabel: false, range: "$min..$max") {			state "setCoolingSetpoint", action:"thermostat.setCoolingSetpoint", backgroundColor: "#1e9cbb"
 		}
 		valueTile("coolingSetpoint", "device.coolingSetpoint", inactiveLabel: false, decoration: "flat") {
 			state "cool", label:'${currentValue}° cool', unit:"F", backgroundColor:"#ffffff"
@@ -126,15 +125,14 @@ metadata {
 			state "configure", label:'', action:"configuration.configure", icon:"st.secondary.configure"
 		}
 
+        valueTile("scheduleText", "prorgammingOperation", inactiveLabel: false, decoration: "flat", width: 2) {
+        	state "default", label: 'Schedule'
+    	}
+    	valueTile("schedule", "prorgammingOperationDisplay", inactiveLabel: false, decoration: "flat") {
+        	state "default", action:"Program", label: '${currentValue}'
+    	}
 
-    valueTile("scheduleText", "prorgammingOperation", inactiveLabel: false, decoration: "flat", width: 2) {
-        state "default", label: 'Schedule'
-    }
-    valueTile("schedule", "prorgammingOperationDisplay", inactiveLabel: false, decoration: "flat") {
-        state "default", action:"Program", label: '${currentValue}'
-    }
-
-    valueTile("hold", "setpointHoldDisplay", inactiveLabel: false, decoration: "flat", width: 3) {
+    	valueTile("hold", "setpointHoldDisplay", inactiveLabel: false, decoration: "flat", width: 3) {
             state "setpointHold", action:"Hold", label: '${currentValue}'
 		}
 
@@ -144,7 +142,7 @@ metadata {
 				backgroundColor: "#919191")
 		}
 
-				standardTile("upButton", "upButtonState", decoration: "flat", inactiveLabel: false) {
+		standardTile("upButton", "upButtonState", decoration: "flat", inactiveLabel: false) {
 			state "normal", action:"raiseSetpoint", backgroundColor:"#919191", icon:"st.thermostat.thermostat-up"
 			state "pressed", action:"raiseSetpoint", backgroundColor:"#ff0000", icon:"st.thermostat.thermostat-up"
 		}
@@ -155,14 +153,8 @@ metadata {
 
 
 		main "temperature"
-		details([
-      "temperature", "mode", "hvacStatus",
-			"setpoint","upButton","downButton",
-			"scheduleText", "schedule",
-	    "hold",
-    "heatSliderControl", "heatingSetpoint",
-     "coolSliderControl", "coolingSetpoint",
-     "lock", "refresh", "configure"])
+		details([ "temperature", "mode", "hvacStatus","setpoint","upButton","downButton","scheduleText", "schedule", "hold",
+        "heatSliderControl", "heatingSetpoint","coolSliderControl", "coolingSetpoint", "lock", "refresh", "configure"])
 	}
 }
 
@@ -194,101 +186,161 @@ def getMax() {
 // parse events into attributes
 def parse(String description) {
 	log.debug "Parse description $description"
-	def map = [:]
+	def result = []
+
 	if (description?.startsWith("read attr -")) {
 
 		//TODO: Parse RAW strings for multiple attributes
 		def descMap = parseDescriptionAsMap(description)
 		log.debug "Desc Map: $descMap"
-
-
-    if (descMap.cluster == "0201")
+		for ( atMap in descMap.attrs)
 		{
-			switch(descMap.attrId)
+			def map = [:]
+
+		  if (descMap.cluster == "0201")
 			{
-            case "0000":
-  						map.name = "temperature"
-  						map.value = getTemperature(descMap.value)
-							sendEvent("name":"displayTemperature", "value": getDisplayTemperature(descMap.value))
+				//log.trace "attribute: ${atMap.attrId} "
+                switch(atMap.attrId.toLowerCase())
+				{
+	            case "0000":
+	  						map.name = "temperature"
+	  						map.value = getTemperature(atMap.value)
+								result += createEvent("name":"displayTemperature", "value": getDisplayTemperature(atMap.value))	  					break;
+	            case "0005":
+	            //log.debug "hex time: ${descMap.value}"
+	            	if (atMap.encoding ==  "23")
+	                {
+	            	    	map.name = "holdExpiary"
+	                  	map.value = "${convertToTime(atMap.value).getTime()}"
+	                    //log.trace "HOLD EXPIRY: ${atMap.value} is ${map.value}"
+	                    updateHoldLabel("HoldExp", "${map.value}")
+	  				}
+	            break;
+	  				  case "0011":
+	  						map.name = "coolingSetpoint"
+	  						map.value = getDisplayTemperature(atMap.value)
+								updateSetpoint(map.name,map.value)
+	  					break;
+	  					case "0012":
+	  						map.name = "heatingSetpoint"
+	  						map.value = getDisplayTemperature(atMap.value)
+								updateSetpoint(map.name,map.value)
+	  					break;
+	  					case "001c":
+                        	map.name = "thermostatMode"
+	  						map.value = getModeMap()[atMap.value]
+							updateSetpoint(map.name,map.value)
+	  					break;
+							case "001e":   //running mode enum8
+			          			map.name = "runningMode"
+								map.value = getModeMap()[atMap.value]
+								updateSetpoint(map.name,map.value)
+							break;
+	            case "0023":   // setpoint hold enum8
+	            map.name = "setpointHold"
+	            map.value = getHoldMap()[atMap.value]
+	            updateHoldLabel("Hold", map.value)
+	            break;
+	            case "0024":   // hold duration int16u
+	            map.name = "setpointHoldDuration"
+	            map.value = Integer.parseInt("${atMap.value}", 16)
 
-  					break;
-            case "0005":
-            //log.debug "hex time: ${descMap.value}"
-            	if (descMap.encoding ==  "23")
-                {
-            	    	map.name = "holdExpiary"
-                  	map.value = "${convertToTime(descMap.value).getTime()}"
-                    log.trace "HOLD EXPIRY: ${descMap.value} is ${map.value}"
+	            break;
+	            case "0025":   // thermostat programming operation bitmap8
+	  					map.name = "prorgammingOperation"
+	                      def val = getProgrammingMap()[Integer.parseInt("${atMap.value}", 16) & 0x01]
+	  					result += createEvent("name":"prorgammingOperationDisplay", "value": val)
+	            map.value = atMap.value
+	  					break;
+	            case "0029":
+								// relay state
+	              map.name = "thermostatOperatingState"
+	              map.value = getThermostatOperatingState(atMap.value)
+	            break;
+	      }
+	    } else if (descMap.cluster == "0204")
+	    {
+	      if (atMap.attrId == "0001")
+	      {
+	  			map.name = "lockLevel"
+                map.value = getLockMap()[atMap.value]
+	      }
+	    }
 
-                    updateHoldLabel("HoldExp", "${map.value}")
-  							}
-            break;
-  				  case "0011":
-  						map.name = "coolingSetpoint"
-  						map.value = getDisplayTemperature(descMap.value)
-							updateSetpoint(map.name,map.value)
-  					break;
-  					case "0012":
-  						map.name = "heatingSetpoint"
-  						map.value = getDisplayTemperature(descMap.value)
-							updateSetpoint(map.name,map.value)
-  					break;
-  					case "001c":
-  						map.name = "thermostatMode"
-  						map.value = getModeMap()[descMap.value]
-							updateSetpoint(map.name,map.value)
-  					break;
-						case "001e":   //running mode enum8
-		          map.name = "runningMode"
-							map.value = getModeMap()[descMap.value]
-							updateSetpoint(map.name,map.value)
-						break;
-            case "0023":   // setpoint hold enum8
-            map.name = "setpointHold"
-            map.value = getHoldMap()[descMap.value]
-            updateHoldLabel("Hold", map.value)
-            break;
-            case "0024":   // hold duration int16u
-            map.name = "setpointHoldDuration"
-            map.value = Integer.parseInt(descMap.value, 16)
-            //sendEvent("name":"setpointHoldDurationDisplay", "value": timeLength(map.value))
-            break;
-            case "0025":   // thermostat programming operation bitmap8
-  					map.name = "prorgammingOperation"
-                      def val = getProgrammingMap()[Integer.parseInt(descMap.value, 16) & 0x01]
-  					sendEvent("name":"prorgammingOperationDisplay", "value": val)
-            map.value = descMap.value
-  					break;
-            case "0029":
-							// relay state
-              map.name = "thermostatOperatingState"
-              map.value = getThermostatOperatingState(descMap.value)
-            break;
-      }
-    } else if (descMap.cluster == "0204")
-    {
-      if (descMap.attrId == "0001")
-      {
-  			map.name = "lockLevel"
-  			map.value = getLockMap()[descMap.value]
-      }
-    }
+		 if (map) {
+            result += createEvent(map)
+ 	 	 }
+	  }
   }
 
-	def result = null
-	if (map) {
-		result = createEvent(map)
-	}
-	log.debug "Parse returned $map"
+	log.debug "Parse returned $result"
 	return result
 }
 
 def parseDescriptionAsMap(description) {
-	(description - "read attr - ").split(",").inject([:]) { map, param ->
-		def nameAndValue = param.split(":")
-		map += [(nameAndValue[0].trim()):nameAndValue[1].trim()]
-	}
+  def map = (description - "read attr - ").split(",").inject([:]) { map, param ->
+  def nameAndValue = param.split(":")
+  map += [(nameAndValue[0].trim()):nameAndValue[1].trim()]
+  }
+
+    def attrId = map.get('attrId')
+    def encoding = map.get('encoding')
+    def value = map.get('value')
+    def result = map.get('result')
+    def list = [];
+
+  if (getDataLengthByType(map.get('encoding')) < map.get('value').length()) {
+    def raw = map.get('raw')
+
+    def size = Long.parseLong(''+ map.get('size'), 16)
+    def index = 12;
+    def len
+
+    //log.trace "processing multi attributes"
+    while((index-12) < size) {
+       attrId = flipHexStringEndianness(raw[index..(index+3)])
+       index+= 4;
+       if (result == "success")
+       index+=2;
+       encoding = raw[index..(index+1)]
+       index+= 2;
+       len =getDataLengthByType(encoding)
+       value = flipHexStringEndianness(raw[index..(index+len-1)])
+       index+=len;
+       list += ['attrId': "$attrId", 'encoding':"$encoding", 'value': "$value"]
+    }
+  }
+  else
+    list += ['attrId': "$attrId", 'encoding': "$encoding", 'value': "$value"]
+
+  map.remove('value')
+  map.remove('encoding')
+  map.remove('attrId')
+  map += ['attrs' : list ]
 }
+
+def flipHexStringEndianness(s)
+{
+  s = s.reverse()
+  def sb = new StringBuilder()
+  for (int i=0; i < s.length() -1; i+=2)
+   sb.append(s.charAt(i+1)).append(s.charAt(i))
+  sb
+}
+
+def getDataLengthByType(t)
+{
+	// number of bytes in each static data type
+	 def map = ["08":1,	"09":2,	"0a":3,	"0b":4,	"0c":5,	"0d":6,	"0e":7,	"0f":8,	"10":1,	"18":1,	"19":2,	"1a":3,	"1b":4,
+	 "1c":5,"1d":6,	"1e":7,	"1f":8,	"20":1,	"21":2,	"22":3,	"23":4,	"24":5,	"25":6,	"26":7,	"27":8,	"28":1,	"29":2,
+	 "2a":3,	"2b":4,	"2c":5,	"2d":6,	"2e":7,	"2f":8,	"30":1,	"31":2,	"38":2,	"39":4,	"40":8,	"e0":4,	"e1":4,	"e2":4,
+	 "e8":2,	"e9":2,	"ea":4,	"f0":8,	"f1":16]
+
+	// return number of hex chars if the type is not in the map,
+    // then it's likely a malformed msg and should not be parsed
+    return (map.get(t) ?: 256) * 2
+}
+
 
 def getProgrammingMap() { [
 	0:"Off",
@@ -320,7 +372,6 @@ def updateSetpoint(attrib, val)
 	def heat = device.currentState("heatingSetpoint")?.value
 	def runningMode = device.currentState("runningMode")?.value
 	def mode = device.currentState("thermostatMode")?.value
-	//log.trace "cool: $cool heat: $heat running mode: $runningMode mode: $mode"
 
 	def value = '--';
 
@@ -366,33 +417,23 @@ def adjustSetpoint(value)
 
     def amountData = String.format("%02X", value)[-2..-1]
 
-    //log.debug "raise  mode: $modeData amout: $amountData"
 
-	[
 	"st cmd 0x${device.deviceNetworkId} 1 0x201 0 {" + modeData + " " + amountData + "}"
-	] + readAttributesCommand(0x201, [
-			0x11,  //cooling set point
-			0x12,  //heating set point
-			0x1E,  // setpoint hold
-			0x23,	 // running mode
-			0x29,  // relay state
-			//0x30,  // set point change source
-			//0x32,  // set point change timestamp
-			])
+
 }
 
 
 def getDisplayTemperature(value)
 {
-	def t = Integer.parseInt(value, 16);
+	def t = Integer.parseInt("$value", 16);
+
 
 	if (getTemperatureScale() == "C") {
 		t = (((t + 4) / 10) as Integer) / 10;
 	} else {
-		t = (celsiusToFahrenheit(t/10) as Integer)/ 10;
+		t = ((10 *celsiusToFahrenheit(t/100)) as Integer)/ 10;
 	}
 
-	//log.trace "getting temperature: " + t;
 
 	return t;
 }
@@ -409,9 +450,7 @@ def updateHoldLabel(attr, value)
     	currentHold = value
     }
 
-	  //log.trace "holdexp ${holdExp} and ${(holdExp == null)} and ${new Date().getTime()}"
-
-		if ("HoldExp" == attr)
+	    if ("HoldExp" == attr)
 		{
 			holdExp = value
 		}
@@ -419,9 +458,10 @@ def updateHoldLabel(attr, value)
 
 		if ("HoldExp" == attr)
 		{
-  			// in case currentHold is lagging, this means there actually is hold
-			if (!past)
+  			if (!past)
 				currentHold = "On"
+            else
+				currentHold = "Off"
     }
 
 	def holdString = (currentHold == "On")?
@@ -435,20 +475,19 @@ def getSetPointHoldDuration()
 {
 	def holdTime = 0
 
-    if (settings.hold_time.contains("Hours"))
+    if (settings.hold_time?.contains("Hours"))
     {
     	holdTime = Integer.parseInt(settings.hold_time[0..1].trim())
     }
-    else if (settings.hold_time.contains("Day"))
+    else if (settings.hold_time?.contains("Day"))
     {
     	holdTime = Integer.parseInt(settings.hold_time[0..1].trim()) * 24
     }
 
     def currentHoldDuration = device.currentState("setpointHoldDuration")?.value
 
- 	  //log.debug "hours : $holdTime and setpointhold $currentHoldDuration "
 
-    if (Short.parseShort(currentHoldDuration) != (holdTime * 60))
+    if (Short.parseShort('0'+ (currentHoldDuration?: 0)) != (holdTime * 60))
     {
     	[
         	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x24 0x21 {" +
@@ -467,8 +506,6 @@ def getSetPointHoldDuration()
 
 def Hold()
 {
-	//log.trace "hold dur " + getSetPointHoldDuration()
-
 	def currentHold = device.currentState("setpointHold")?.value
 
 	def next = (currentHold == "On") ? "00" : "01"
@@ -477,20 +514,13 @@ def Hold()
 	sendEvent("name":"setpointHold", "value":nextHold)
 
 	// set the duration first if it's changed
-	getSetPointHoldDuration() +
+
     [
     "st wattr 0x${device.deviceNetworkId} 1 0x201 0x23 0x30 {$next}", "delay 100" ,
+
     "raw 0x201 {04 21 11 00 00 05 00 }","delay 200",      // hold expiry time
-  	"send 0x${device.deviceNetworkId} 1 1", "delay 200",
-    ] + readAttributesCommand(0x201, [
-				0x11,  //cooling set point
-				0x12,  //heating set point
-				0x1E,  //running mode
-				0x23,	 //setpoint hold
-				0x29,  //relay state
-				//0x30,  // set point change source
-				//0x32,  // set point change timestamp
-				])
+  	"send 0x${device.deviceNetworkId} 1 1", "delay 1500",
+    ] + getSetPointHoldDuration()
 }
 
 def compareWithNow(d)
@@ -530,15 +560,15 @@ def compareWithNow(d)
 
 def convertToTime(data)
 {
-	def time = Integer.parseInt(data, 16) as long;
+	def time = Integer.parseInt("$data", 16) as long;
     time *= 1000;
     time += 946684800000; // 481418694
+    // TODO: this pulls off the wrong daylight savings time.
     time -= location.timeZone.getRawOffset() + location.timeZone.getDSTSavings();
 
     def d = new Date(time);
 
-    //log.debug "time: " + time + " date: " + d;
-
+	//log.trace "converted $data to Time $d"
 	return d;
 }
 
@@ -546,7 +576,7 @@ def Program()
 {
    	def currentSched = device.currentState("prorgammingOperation")?.value
 
-  def next = Integer.parseInt(currentSched, 16);
+    def next = Integer.parseInt(currentSched?: "00", 16);
     if ( (next & 0x01) == 0x01)
     	next = next & 0xfe;
     else
@@ -554,31 +584,16 @@ def Program()
 
 	def nextSched = getProgrammingMap()[next & 0x01]
 
-	//log.debug "switching Program from $currentSched to $nextSched next: $next"
+    "st wattr 0x${device.deviceNetworkId} 1 0x201 0x25 0x18 {$next}"
 
-    [
-    "st wattr 0x${device.deviceNetworkId} 1 0x201 0x25 0x18 {$next}", "delay 100"
-		] + readAttributesCommand(0x201, [
-			  0x25,  //programming operations
-				0x11,  //cooling set point
-				0x12,  //heating set point
-				0x1E,  // setpoint hold
-				0x23,	 // running mode
-				0x29,  // relay state
-				//0x30,  // set point change source
-				//0x32,  // set point change timestamp
-				])
 }
 
 
 def getThermostatOperatingState(value)
 {
-	// ["idle", "fan only", "vent economizer", "cooling", "pending heat", "heating", "pending cool"]
-	// even though ModeStatus is not exactly the same as Operating State it's nice to match existing
-	// capability
 	String[] m = [ "heating", "cooling", "fan", "Heat2", "Cool2", "Fan2", "Fan3"]
 	String desc = 'idle'
-		value = Integer.parseInt(value, 16)
+		value = Integer.parseInt(''+value, 16)
 
 		// only check for 1-stage  for A1730
 	for ( i in 0..2 ) {
@@ -595,12 +610,14 @@ def checkLastTimeSync(delay)
     if (!lastSync)
     	lastSync = "${new Date(0)}"
 
-    if (settings.sync_clock ?: false && lastSync != new Date(0))
-    	{
-        	sendEvent("name":"lastTimeSync", "value":"${new Date(0)}")
-    	}
-
-
+	if (!settings.sync_clock)
+	{
+		if (lastSync != new Date(0))
+		{
+			sendEvent("name":"lastTimeSync", "value":"${new Date(0)}")
+		}
+		return []
+	}
 
 	long duration = (new Date()).getTime() - (new Date(lastSync)).getTime()
 
@@ -614,66 +631,46 @@ def checkLastTimeSync(delay)
 	return []
 }
 
-def refresh()
-{
-	//log.debug "refresh called"
-
-	checkLastTimeSync(2000) +
- 	readAttributesCommand(0x201, [
-			0x00,  // temperature
-			0x11,  // cooling set point
-			0x12,  // heating set point
-			0x1C,  // mode enum8
-			0x1E,  // running mode
-			0x23,	 // setpoint hold enum8
-			0x24,  // hold duration int16u
-			0x25,  // thermostat programming operation bitmap8
-			0x29,  // relay state bitmap8
-			//0x30,  // set point change source
-			//0x32,  // set point change timestamp
-			]) +
-			[
-	    "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 200",  // lock status
-	    "raw 0x201 {04 21 11 00 00 05 00 }"                , "delay 500",       // hold expiary
-	    "send 0x${device.deviceNetworkId} 1 1"             , "delay 600",
-			]
-}
-
 def readAttributesCommand(cluster, attribList)
 {
 	def attrString = ''
 
-	def list = []
-
-	// reading multiple attributes in one command currently
-	// causes parsing problems
-
 	for ( val in attribList ) {
-		//def val = Short.decode(i)
     attrString += ' ' + String.format("%02X %02X", val & 0xff , (val >> 8) & 0xff)
 	}
 
-	attrString =  "st rattr 0x${device.deviceNetworkId} 1 $cluster "
+	//log.trace "list: " + attrString
 
-	for ( val in attribList ) {
-		list.add(attrString + String.format("0x%02X", val))
-		list.add("delay 200")
-	}
+	["raw "+ cluster + " {00 00 00 $attrString}","delay 100",
+	"send 0x${device.deviceNetworkId} 1 1", "delay 100",
+	]
+}
 
-	log.trace "list: ${list}"
+def refresh()
+{
+	log.debug "refresh called"
+     // log.trace "list: " +       readAttributesCommand(0x201, [0x1C,0x1E,0x23])
 
-	list
-
+        readAttributesCommand(0x201, [0x00,0x11,0x12]) +
+        readAttributesCommand(0x201, [0x1C,0x1E,0x23]) +
+        readAttributesCommand(0x201, [0x24,0x25,0x29]) +
+        [
+	    "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 200",  // lock status
+        "raw 0x201 {04 21 11 00 00 05 00 }"                , "delay 500",  // hold expiary
+	    "send 0x${device.deviceNetworkId} 1 1"             , "delay 1500",
+		]  + checkLastTimeSync(2000)
 }
 
 
+
+
 def poll() {
-	//log.debug "Executing 'poll'"
+	log.trace "poll called"
 	refresh()
 }
 
 def getTemperature(value) {
-	def celsius = Integer.parseInt(value, 16) / 100
+	def celsius = Integer.parseInt("$value", 16) / 100
 
 	if(getTemperatureScale() == "C"){
 		return celsius as Integer
@@ -689,36 +686,20 @@ def setHeatingSetpoint(degrees) {
 	sendEvent("name":"heatingSetpoint", "value":degreesInteger)
 
 	def celsius = (getTemperatureScale() == "C") ? degreesInteger : (fahrenheitToCelsius(degreesInteger) as Double).round(2)
-	[
 	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x12 0x29 {" + hex(celsius*100) + "}"
-	] + readAttributesCommand(0x201, [
-			0x12,  //heating set point
-			0x1E,  // setpoint hold
-			0x23,	 // running mode
-			0x29,  // relay state
-			//0x30,  // set point change source
-			//0x32,  // set point change timestamp
-			])
+
 }
 
 def setCoolingSetpoint(degrees) {
 	def degreesInteger = degrees as Integer
 	sendEvent("name":"coolingSetpoint", "value":degreesInteger)
 	def celsius = (getTemperatureScale() == "C") ? degreesInteger : (fahrenheitToCelsius(degreesInteger) as Double).round(2)
-	[
-    "st wattr 0x${device.deviceNetworkId} 1 0x201 0x11 0x29 {" + hex(celsius*100) + "}",
-  ] + readAttributesCommand(0x201, [
-			0x11,  //cooling set point
-			0x1E,  // setpoint hold
-			0x23,	 // running mode
-			0x29,  // relay state
-			//0x30,  // set point change source
-			//0x32,  // set point change timestamp
-			])
+	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x11 0x29 {" + hex(celsius*100) + "}"
+
 }
 
 def modes() {
-	["off", "heat", "cool", "auto"]
+	["off", "heat", "cool"]
 }
 
 def setThermostatFanMode() {
@@ -743,7 +724,6 @@ def setThermostatMode() {
 	def modeOrder = modes()
 	def index = modeOrder.indexOf(currentMode)
 	def next = index >= 0 && index < modeOrder.size() - 1 ? modeOrder[index + 1] : modeOrder[0]
-//	log.debug "switching mode from $currentMode to $next"
 
 	setThermostatMode(next)
 }
@@ -751,14 +731,11 @@ def setThermostatMode() {
 def setThermostatMode(String next) {
 	def val = (getModeMap().find { it.value == next }?.key)?: "00"
 
-	sendEvent("name":"thermostatMode", "value":next)
+	// log.trace "mode changing to $next sending value: $val"
 
-	//log.debug "setThermostatMode({$value})"
-
-	[
-	"st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {$val}",
-	"delay 100"
-	] + readAttributesCommand(0x201, [0x11, 0x12, 0x1C, 0x1E, 0x23, 0x29, 0x30, 0x32])
+	sendEvent("name":"thermostatMode", "value":"$next")
+	["st wattr 0x${device.deviceNetworkId} 1 0x201 0x1C 0x30 {$val}"] +
+    refresh()
 }
 
 def setThermostatFanMode(String value) {
@@ -786,35 +763,25 @@ def on() {
 }
 
 def fanOn() {
-	//log.debug "fanOn"
-	sendEvent("name":"thermostatFanMode", "value":"fanOn")
+	 sendEvent("name":"thermostatFanMode", "value":"fanOn")
 	"st wattr 0x${device.deviceNetworkId} 1 0x202 0 0x30 {04}"
 }
 
 
 def fanAuto() {
-	//log.debug "fanAuto"
-	sendEvent("name":"thermostatFanMode", "value":"fanAuto")
+	 sendEvent("name":"thermostatFanMode", "value":"fanAuto")
 	"st wattr 0x${device.deviceNetworkId} 1 0x202 0 0x30 {05}"
 }
 
 def updated()
 {
-  //  log.debug "updated, scheduling set time"
 	def lastSync = device.currentState("lastTimeSync")?.value
-	// log.debug "update last sync: $lastSync"
-    // reset the last sync time if this no
 	if ((settings.sync_clock ?: false) == false)
 			{
             	log.debug "resetting last sync time.  Used to be: $lastSync"
-                // this sendevent does not get executed somehow
                 sendEvent("name":"lastTimeSync", "value":"${new Date(0)}")
 
       }
-    // run every two minutes
-    //schedule("0 0/2 * * * ?", setThermostatTime)
-    //unschedule()
-    //log.trace "commands: "  + device
 
 }
 
@@ -843,77 +810,78 @@ def lock()
   else
       val = "00"
 
-  //log.debug "sending ${val} as the new lock value"
+ "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01"
 
-  [ //"st wattr 0x${device.deviceNetworkId} 1 0x204 1 0x30 {${val}}",
-   "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 500"
-  ]
 }
 
 
 def setThermostatTime()
 {
 
-  if ((settings.sync_clock ?: false))
+  if (false == (settings.sync_clock ?: false))
     {
       log.debug "sync time is disabled, leaving"
       return []
     }
 
-  //Calendar calendar = Calendar.getInstance();
-  //calendar.set(Calendar.MILLISECOND, 0); // Clear the millis part. Silly API.
-  //calendar.set(2000, 0, 1, 0, 0, 0); // Note that months are 0-based
-  // java zigbee epoch 946684800000
-  //
-
-  Date date = new Date();
-  String zone = location.timeZone.getRawOffset() + " DST " + location.timeZone.getDSTSavings();
-
-	//log.debug "sync time for ${device.deviceNetworkId} at ${date} location: ${zone}"
+  	Date date = new Date();
+  	String zone = location.timeZone.getRawOffset() + " DST " + location.timeZone.getDSTSavings();
 
 	long millis = date.getTime(); // Millis since Unix epoch
-  millis -= 946684800000;  // adjust for ZigBee EPOCH
+  	millis -= 946684800000;  // adjust for ZigBee EPOCH
   // adjust for time zone and DST offset
-	millis += location.timeZone.getRawOffset() + location.timeZone.getDSTSavings();
+	millis += location.timeZone.getOffset(date.getTime());
 	//convert to seconds
 	millis /= 1000;
 
 	// print to a string for hex capture
-  String s = String.format("%08X", millis);
+  	String s = String.format("%08X", millis);
 	// hex capture for message format
-  String data = " " + s.substring(6, 8) + " " + s.substring(4, 6) + " " + s.substring(2, 4)+ " " + s.substring(0, 2);
+  	String data = " " + s.substring(6, 8) + " " + s.substring(4, 6) + " " + s.substring(2, 4)+ " " + s.substring(0, 2);
 
-	//log.trace "time data: ${data}"
 	[
-  "raw 0x201 {04 21 11 00 02 0f 00 23 ${data} }",
-  "send 0x${device.deviceNetworkId} 1 1"
-  ]
+  	"raw 0x201 {04 21 11 00 02 0f 00 23 ${data} }",
+  	"send 0x${device.deviceNetworkId} 1 ${endpointId}"
+  	]
 }
 
 def configure() {
 
  	[
-			"zdo bind 0x${device.deviceNetworkId} 1 1 0x201 {${device.zigbeeId}} {}", "delay 200",
-			       //"zcl global send-me-a-report [cluster:2] [attributeId:2] [dataType:1] [minReportTime:2] [maxReport-Time:2] [reportableChange:-1]"
-  		"zcl global send-me-a-report 0x201 0x0000 0x29 20 300 {19 00}", // report temperature changes over 0.2C
-  		"send 0x${device.deviceNetworkId} 1 1",
-			"zcl global send-me-a-report 0x201 0x001C 0x30 1 305 { }", // mode
-			"send 0x${device.deviceNetworkId} 1 1",
-			"zcl global send-me-a-report 0x201 0x0025 0x18 1 310 { 00 }", // schedule on/off
-			"send 0x${device.deviceNetworkId} 1 1",
-			"zcl global send-me-a-report 0x201 0x001E 0x30 1 315 { 00 }", // running mode
-			"send 0x${device.deviceNetworkId} 1 1",
-			"zcl global send-me-a-report 0x201 0x0011 0x29 1 320 {32 00}", // cooling setpoint delta: 0.5C (0x3200 in little endian)
-			"send 0x${device.deviceNetworkId} 1 1",
-			"zcl global send-me-a-report 0x201 0x0012 0x29 1 320 {32 00}", // cooling setpoint delta: 0.5C (0x3200 in little endian)
-			"send 0x${device.deviceNetworkId} 1 1",
-			"zcl global send-me-a-report 0x201 0x0029 0x19 1 325 { 00 }",  // relay status
-			"send 0x${device.deviceNetworkId} 1 1",
-			"zcl global send-me-a-report 0x201 0x0023 0x30 1 330 { 00 }",		// hold
-        "send 0x${device.deviceNetworkId} 1 1"
+			"zdo bind 0x${device.deviceNetworkId} 1 1 0x201 {${device.zigbeeId}} {}", "delay 500",
+
+            "zcl global send-me-a-report 0x201 0x0000 0x29 20 300 {19 00}",  // report temperature changes over 0.2C
+  		    "send 0x${device.deviceNetworkId} 1 ${endpointId}", "delay 500",
+
+            "zcl global send-me-a-report 0x201 0x001C 0x30 10 305 { }",  // mode
+			"send 0x${device.deviceNetworkId} 1 ${endpointId}","delay 500",
+
+            "zcl global send-me-a-report 0x201 0x0025 0x18 10 310 { 00 }",  // schedule on/off
+			"send 0x${device.deviceNetworkId} 1 ${endpointId}","delay 500",
+
+            "zcl global send-me-a-report 0x201 0x001E 0x30 10 315 { 00 }",  // running mode
+			"send 0x${device.deviceNetworkId} 1 ${endpointId}","delay 500",
+
+            "zcl global send-me-a-report 0x201 0x0011 0x29 10 320 {32 00}",  // cooling setpoint delta: 0.5C (0x3200 in little endian)
+			"send 0x${device.deviceNetworkId} 1 ${endpointId}","delay 500",
+
+            "zcl global send-me-a-report 0x201 0x0012 0x29 10 320 {32 00}", // cooling setpoint delta: 0.5C (0x3200 in little endian)
+			"send 0x${device.deviceNetworkId} 1 ${endpointId}","delay 500",
+
+            "zcl global send-me-a-report 0x201 0x0029 0x19 10 325 { 00 }", "delay 200",  // relay status
+			"send 0x${device.deviceNetworkId} 1 ${endpointId}","delay 500",
+
+            "zcl global send-me-a-report 0x201 0x0023 0x30 10 330 { 00 }", 		// hold
+            "send 0x${device.deviceNetworkId} 1 ${endpointId}","delay 1500",
+
 	] + refresh()
 }
 
 private hex(value) {
 	new BigInteger(Math.round(value).toString()).toString(16)
+}
+
+private getEndpointId()
+{
+	new BigInteger(device.endpointId, 16).toString()
 }
