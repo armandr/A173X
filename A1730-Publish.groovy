@@ -3,11 +3,11 @@
  *
  *	Author: Fidure
  *	Date: 2014-12-13
- *  Updated: 2015-12-29
+ *  Updated: 2016-1-29
  */
 metadata {
 	// Automatically generated. Make future change here.
-	definition (name: "Fidure Thermostat", namespace: "smartthings", author: "SmartThings") {
+	definition (name: "Fidure ThermostatDev", namespace: "smartthings", author: "SmartThings") {
 
         capability "Actuator"
 		capability "Temperature Measurement"
@@ -207,7 +207,8 @@ def parse(String description) {
 	            case "0000":
 	  						map.name = "temperature"
 	  						map.value = getTemperature(atMap.value)
-								result += createEvent("name":"displayTemperature", "value": getDisplayTemperature(atMap.value))
+								result += createEvent("name":"displayTemperature", "value":
+								getDisplayTemperature(atMap.value))
 	  					break;
 	            case "0005":
 	            //log.debug "hex time: ${descMap.value}"
@@ -227,7 +228,7 @@ def parse(String description) {
 	  					case "0012":
 	  						map.name = "heatingSetpoint"
 	  						map.value = getDisplayTemperature(atMap.value)
-								updateSetpoint(map.name,map.value)
+							updateSetpoint(map.name,map.value)
 	  					break;
 	  					case "001c":
                         	map.name = "thermostatMode"
@@ -378,15 +379,13 @@ def updateSetpoint(attrib, val)
 
 	def value = '--';
 
+	if (("heat"  == mode && heat != null) ||
+    	("auto" == mode && runningMode == "heat" && heat != null))
+        	value = (attrib == "heatingSetpoint")? val : heat;
+	else if (("cool"  == mode && cool != null) || ("auto" == mode && runningMode == "cool" && cool != null))
+    	value = (attrib == "coolingSetpoint")? val : cool;
 
-	if ("heat"  == mode && heat != null)
-		value = heat;
-	else if ("cool"  == mode && cool != null)
-		value = cool;
-    else if ("auto" == mode && runningMode == "cool" && cool != null)
-    	value = cool;
-    else if ("auto" == mode && runningMode == "heat" && heat != null)
-    	value = heat;
+
 
 	sendEvent("name":"displaySetpoint", "value": value)
 }
@@ -566,9 +565,7 @@ def convertToTime(data)
 	def time = Integer.parseInt("$data", 16) as long;
     time *= 1000;
     time += 946684800000; // 481418694
-
-		time -= location.timeZone.getOffset(date.getTime());
-
+    time -= location.timeZone.getOffset(date.getTime());
 
     def d = new Date(time);
 
@@ -810,12 +807,12 @@ def lock()
   //log.debug "current lock is: ${val}"
 
   if (val == "00")
-      val = getLockMap().find { it.value == (settings.lock_level ?: "Full") }?.key
+      val = getLockMap().find { it.value == (settings.lock_level ?: "Unlocked") }?.key
   else
       val = "00"
 
- "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01"
-
+  ["st wattr 0x${device.deviceNetworkId} 1 0x204 1 0x30 {${val}}",
+   "st rattr 0x${device.deviceNetworkId} 1 0x204 0x01", "delay 500"]
 }
 
 
