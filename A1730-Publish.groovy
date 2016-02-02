@@ -3,7 +3,7 @@
  *
  *	Author: Fidure
  *	Date: 2014-12-13
- *  Updated: 2015-08-26
+ *  Updated: 2015-12-29
  */
 metadata {
 	// Automatically generated. Make future change here.
@@ -339,8 +339,9 @@ def getDataLengthByType(t)
 	 "2a":3,	"2b":4,	"2c":5,	"2d":6,	"2e":7,	"2f":8,	"30":1,	"31":2,	"38":2,	"39":4,	"40":8,	"e0":4,	"e1":4,	"e2":4,
 	 "e8":2,	"e9":2,	"ea":4,	"f0":8,	"f1":16]
 
-	// return number of hex chars
-	 return map.get(t) * 2
+	// return number of hex chars if the type is not in the map,
+    // then it's likely a malformed msg and should not be parsed
+    return (map.get(t) ?: 256) * 2
 }
 
 
@@ -565,7 +566,9 @@ def convertToTime(data)
 	def time = Integer.parseInt("$data", 16) as long;
     time *= 1000;
     time += 946684800000; // 481418694
-    time -= location.timeZone.getRawOffset() + location.timeZone.getDSTSavings();
+
+		time -= location.timeZone.getOffset(date.getTime());
+
 
     def d = new Date(time);
 
@@ -611,12 +614,14 @@ def checkLastTimeSync(delay)
     if (!lastSync)
     	lastSync = "${new Date(0)}"
 
-    if (settings.sync_clock ?: false && lastSync != new Date(0))
-    	{
-        	sendEvent("name":"lastTimeSync", "value":"${new Date(0)}")
-    	}
-
-
+	if (!settings.sync_clock)
+	{
+		if (lastSync != new Date(0))
+		{
+			sendEvent("name":"lastTimeSync", "value":"${new Date(0)}")
+		}
+		return []
+	}
 
 	long duration = (new Date()).getTime() - (new Date(lastSync)).getTime()
 
@@ -817,12 +822,11 @@ def lock()
 def setThermostatTime()
 {
 
-  if ((settings.sync_clock ?: false))
+  if (false == (settings.sync_clock ?: false))
     {
       log.debug "sync time is disabled, leaving"
       return []
     }
-
 
   	Date date = new Date();
   	String zone = location.timeZone.getRawOffset() + " DST " + location.timeZone.getDSTSavings();
@@ -830,7 +834,7 @@ def setThermostatTime()
 	long millis = date.getTime(); // Millis since Unix epoch
   	millis -= 946684800000;  // adjust for ZigBee EPOCH
   // adjust for time zone and DST offset
-	millis += location.timeZone.getRawOffset() + location.timeZone.getDSTSavings();
+	millis += location.timeZone.getOffset(date.getTime());
 	//convert to seconds
 	millis /= 1000;
 
